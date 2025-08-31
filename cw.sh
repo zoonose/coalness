@@ -6,12 +6,12 @@
       # eg., 'bash cw.sh balance'
 
 coals() {
-   [ "$1" == "forever" ] && coalw && exit 0
-
    # Check if 'solana' and 'coal' are installed
    for i in solana coal; do
       [ ! "$(which $i)" ] && printf '\e[1;31m%b\e[m\n' "ERROR\e[1;37m: \"$i\" not installed wyd" && exit 1
    done
+
+   [ "$1" == "forever" ] && coalw && exit 0
 
    # Auto set a different 'solana' config for each username (or don't)
    case "$USER" in
