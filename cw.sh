@@ -21,11 +21,24 @@ coals() {
    esac
 
    # Set 'coal' parameters
-   # - pay high fee to reprocess for $CHROMIUM because reward is timing dependent
+   # - pay high fee to reprocess for $CHROMIUM and enhance tools because reward is timing dependent
    buffer_time=2
-   [ "$1" == "reprocess" ] && priority_fee=2112112 || priority_fee=2501
+   prio_smol=1212
+   prio_big=2112112
    case "$1" in
-      "mine"|"chop"|"smelt"|"reprocess") _params="$* --cores $(nproc) --buffer-time $buffer_time --priority-fee $priority_fee" ;;
+      "mine"|"chop"|"smelt") _params="$1 --cores $(nproc) --buffer-time $buffer_time --priority-fee $prio_smol" ;;
+      "reprocess"|"enhance") _params="$* --priority-fee $prio_big" ;;
+      "stake"|"claim"|"balance")
+         case "$2" in
+            "") _params="$1 --priority-fee $prio_smol" ;;
+            "coal"|"ingot"|"wood") _params="$1 --resource $2 --priority-fee $prio_smol" ;;
+            "chromium")
+               case "$1" in
+                  "stake"|"claim") printf '\e[1;31m%b\e[m\n' "ERROR\e[1;37m: chromium can't be staked" && exit 1 ;;
+                  "balance") _params="$1 --resource $2 --priority-fee $prio_smol" ;;
+               esac ;;
+            *) printf '\e[1;31m%b\e[m\n' "ERROR\e[1;37m: bamboozled\n1=\"$1\"; 2=\"$2\"; *=\"$*\"" && exit 1 ;;
+         esac ;;
       *) _params="$*" ;;
    esac
 
@@ -89,4 +102,4 @@ coalw() {
    done
 }; export -f coalw
 
-coals "$*"
+coals "$@"
