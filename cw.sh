@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cw.sh 0.1.1 for coal-cli 2.9.2
+# cw.sh 0.1.2 for coal-cli 2.9.2
    # Launcher for coal [mine|chop|smelt|reprocess|forever]
       # eg., 'bash cw.sh forever'
    # All other args pass straight to 'coal'
