@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.3" # this must be on line 2 or the version checker will break
+coals_version="0.1.4" # this must be on line 2 or the version checker will break
 # Launcher for coal-cli 2.9.2
 # [mine|smelt|chop|reprocess|stake|claim|equip|unequip|inspect|balance|version|update|uninstall]
 # [forever]
@@ -40,14 +40,11 @@ coal_start() {
 
    case "$1" in
       "mine"|"chop"|"smelt") _params="$1 --cores $(nproc) --buffer-time $buffer_time --priority-fee $prio_smol" ;;
-      "reprocess"|"enhance") _params="$* --priority-fee $prio_big" ;;
-      "balance")
-         case "$2" in
-            "") _params="$1" ;;
-            "coal"|"ingot"|"wood"|"chromium") _params="$1 --resource $2" ;;
-            "ore") printf 'Balance: %s ORE\n' "$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp $_cfg)" && exit 0 ;;
-            *) echo "Options: [coal], ingot, wood, chromium, ore." && exit 1 ;;
-         esac ;;
+      "reprocess") _params="$* --priority-fee $prio_big" ;;
+      "inspect"|"unequip"|"craft") _params="$1 --priority-fee $prio_smol" ;;
+      "enhance"|"equip") [ "$2" != "" ] && [ "$2" == "$(echo $2 | grep -oP "[1-9A-HJ-NP-Za-km-z]{32,44}")" ] && 
+         { _params="$1 --tool $2 --priority-fee $( [ "$1" == "equip" ] && echo "$prio_smol" || echo "$prio_big" )"; } ||
+         { echo "Usage: 'coals $1 <tool_address>'" && exit 1; } ;;
       "stake"|"claim") 
          case "$2" in
             "") _params="$1 --priority-fee $prio_smol" ;;
@@ -55,10 +52,13 @@ coal_start() {
             "chromium"|"ore") echo "Nah: $2 can't be staked" && exit 1 ;;
             *) echo "Options: [coal], ingot, wood." && exit 1 ;;
          esac ;;
-      "unequip"|"inspect") _params="$1 --priority-fee $prio_smol" ;;
-      "equip") [ "$2" != "" ] && [ "$2" == "$(echo $2 | grep -oP "[1-9A-HJ-NP-Za-km-z]{32,44}")" ] && 
-         { _params="$1 --tool $2 --priority-fee $prio_smol"; } ||
-         { echo "Usage: 'coals equip <tool_address>'" && exit 1; } ;;
+      "balance")
+         case "$2" in
+            "") _params="$1" ;;
+            "coal"|"ingot"|"wood"|"chromium") _params="$1 --resource $2" ;;
+            "ore") printf 'Balance: %s ORE\n' "$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp $_cfg)" && exit 0 ;;
+            *) echo "Options: [coal], ingot, wood, chromium, ore." && exit 1 ;;
+         esac ;;
       "version") coal -V; exit 0 ;;
       *) _params="$*" ;;
    esac
