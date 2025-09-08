@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-coals_version="0.1.4" # this must be on line 2 or the version checker will break
+coals_version="0.1.5" # this must be on line 2 or the version checker will break
 # Launcher for coal-cli 2.9.2
 # [mine|smelt|chop|reprocess|stake|claim|equip|unequip|inspect|balance|version|update|uninstall]
 # [forever]
 # All other args pass straight to 'coal'
 
 coal_start() {
-   [ "$1" == "update" ] && coals_update && exit 0
+   [ "$1" == "update" ] && { coals_update; exit; }
    [ "$1" == "uninstall" ] && [ "$0" == "$HOME/.local/bin/coals" ] && { 
       printf '\e[1;33m%s\e[m' "Uninstalling coals..."
       rm "$HOME/.local/bin/coals" &&
@@ -139,7 +139,7 @@ coals_checkver() {
    done
    # Exit if same or older version than installed
    case "$cver_this_isnewer" in
-      "") echo "Error: coals v$coals_version already installed (run 'coals uninstall' to remove)" && exit 1 ;;
+      "") echo "v$coals_version already installed (run 'coals uninstall' to remove)" && exit 1 ;;
       0) echo "Error: newer version (${cver_exist[*]}) already installed (run 'coals uninstall' to remove)" && exit 1 ;;
    esac
    IFS="$IFS_"
