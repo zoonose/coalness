@@ -146,12 +146,13 @@ coals_checkver() {
 }; export -f coals_checkver
 
 coals_update() {
-echo "no function here yet"
-   # curl -sL "https://raw.githubusercontent.com/zoonose/coalness/main/coals.sh" -o "./coals.sh" || { echo "Failed to download coals.sh" && exit 1; }
-   # [ ! -f "./coals.sh" ] && echo ":(" && exit 1;
-   # coals_install
+fetch_temp=$(mktemp --suffix ".coals.sh")
+echo "Downloading latest version..."
+curl -sL "https://raw.githubusercontent.com/zoonose/coalness/main/coals.sh" -o "$fetch_temp" || { echo "Failed to download" && exit 1; }
+bash "$fetch_temp" || echo "Failed to run installer"
+[ -f "$fetch_temp" ] && rm "$fetch_temp"
 }; export -f coals_update
 
 # MAIN
 # Run installer if script is called 'coals.sh', otherwise run 'coals'
-[ "$0" == *"coals.sh" ] && { coals_install; } || { echo "coals v$coals_version"; coal_start "$@"; }
+[[ '$0' == *"coals.sh" ]] && { coals_install; } || { echo "coals v$coals_version"; coal_start "$@"; }
