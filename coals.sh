@@ -149,8 +149,8 @@ coals_update() {
 fetch_temp=$(mktemp --suffix ".coals.sh")
 echo "Downloading latest version..."
 curl -sL "https://raw.githubusercontent.com/zoonose/coalness/main/coals.sh" -o "$fetch_temp" || { echo "Failed to download" && exit 1; }
-bash "$fetch_temp" || echo "Failed to run installer"
-[ -f "$fetch_temp" ] && rm "$fetch_temp"
+bash "$fetch_temp" # || echo "Failed to run installer"
+# [ -f "$fetch_temp" ] && rm "$fetch_temp"
 }; export -f coals_update
 
 # MAIN
