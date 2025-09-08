@@ -155,4 +155,4 @@ bash "$fetch_temp" # || echo "Failed to run installer"
 
 # MAIN
 # Run installer if script is called 'coals.sh', otherwise run 'coals'
-[[ '$0' == *"coals.sh" ]] && { coals_install; } || { echo "coals v$coals_version"; coal_start "$@"; }
+[[ "$0" == *"coals.sh" ]] && { coals_install; } || { echo "coals v$coals_version"; coal_start "$@"; }
