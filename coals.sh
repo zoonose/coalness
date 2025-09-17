@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.8"
+coals_version="0.1.8.1"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -36,8 +36,7 @@ coal_start() {
 
    # Auto set a different 'solana' config for each username (or don't)
    case "$USER" in
-      "asdf") _cfg="--config $HOME/.config/solana/dirtyore.yml" ;;    # [Y]
-      "asdg") _cfg="--config $HOME/.config/solana/filthyore.yml" ;;   # [0]
+      # "<your_username_here>") _cfg="--config $HOME/.config/solana/<whatever_config_file_you_want_to_use>.yml" ;;
       *) _cfg="--config $HOME/.config/solana/coals_config.yml" ;; # fallback to default
    esac
 
@@ -124,7 +123,7 @@ coals_loop() {
       # Get SOL balance (retry if not found (ie no internet) - ragequit if poor)
       sol_bal="$(solana balance --lamports 2>&1 | awk '{print $1}')"
       [[ "$sol_bal" == "Error"* ]] && { printf '%s\n' "Balance not found, retrying..."; sleep 10; continue; }
-      [ "$sol_bal" -lt 10000000 ] && { printf '\n%b\n\n' "\e[1;31mERROR:\e[m Not enough SOL :("; break; }
+      [ "$sol_bal" -lt 10000000 ] && { printf '\n\e[1;31m%s\e[m%s\n\n' "ERROR: " "Not enough SOL :("; break; }
 
       # Flush log
       : > "$_log"
