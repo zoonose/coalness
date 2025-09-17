@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.7.1"
+coals_version="0.1.8"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -66,7 +66,27 @@ coal_start() {
             "") _params="$1" ;;
             "coal"|"ingot"|"wood"|"chromium") _params="$1 --resource $2" ;;
             "ore") { printf 'Balance: %s ORE\n' "$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp $_cfg)"; exit; } ;;
-            *) { echo "Options: [coal], ingot, wood, chromium, ore."; exit 1; } ;;
+            "all") 
+               printf '\e[1;30m%s\e[m\n' "$(grep -oP "[^/]*$" <<< "$_cfg")"
+               for h in "Balance" "Stake"; do
+                  printf '\e[1;37m%s\e[m\n' "$h:"
+                  for i in "sol" "coal" "ingot" "wood" "chromium" "ore"; do
+                     case "$i" in
+                        "sol") [ "$h" == "Balance" ] &&
+                           while read line; do 
+                              [[ "$line" == *"Error"* ]] && { echo Error, check connection; echo exit; } || 
+                              printf '%12.4f %s\n' "$(grep -oP "\d+(\.\d+)?" <<< "$line")" "SOL"; 
+                           done <<< "$(solana balance 2>&1)" ;;
+                        "coal"|"ingot"|"wood") 
+                           printf '%12.4f %s\n' "$(coal balance --resource "$i" | grep -ioP "(?<=$h:\ )\d+(\.\d+)?")" "${i^^}" ;;
+                        "chromium") [ "$h" == "Balance" ] && 
+                           printf '%12.4f %s\n' "$(coal balance --resource "$i" | grep -ioP "(?<=$h:\ )\d+(\.\d+)?")" "${i^^}" ;;
+                        "ore") [ "$h" == "Balance" ] && 
+                           printf '%12.4f %s\n' "$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp $_cfg)" "${i^^}" ;;
+                     esac
+                  done
+               done ; exit 0 ;;
+            *) { echo "Options: [coal], ingot, wood, chromium, ore, all."; exit 1; } ;;
          esac ;;
       "version") coal -V; exit 0 ;;
       *) _params="$*" ;;
@@ -204,7 +224,7 @@ All other commands (including invalid ones) are passed through directly to 'coal
    coals inspect                # inspect currently equipped pickaxe
    coals unequip                # unequip currently equipped pickaxe
    coals craft                  # craft a new pickaxe (cost 3 ingot and 2 wood)
-   coals enhance <tool_address> # enhance specified pickaxe (cost 1 chromium and 0.01 SOL)
+   coals enhance <tool_address> # enhance specified pickaxe (cost 1 chromium and 0.01 sol)
    coals equip <tool_address>   # equip specified pickaxe
    coals stake                  # stake all coal in wallet
    coals stake coal             # stake all coal in wallet
@@ -220,6 +240,7 @@ All other commands (including invalid ones) are passed through directly to 'coal
    coals balance wood           # show wood balance
    coals balance chromium       # show chromium balance
    coals balance ore            # show ore balance
+   coals balance all            # show all balances (sol, coal, ingot, wood, chromium, ore)
    coals version                # show version numbers of 'coals' and 'coal'
    coals update                 # update 'coals' to latest version
    coals uninstall              # uninstall 'coals'
