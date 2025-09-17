@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-coals_version="0.1.7" # this must be on line 2 or the version checker will break
-# Launcher for coal-cli 2.9.2
-# See end of file for usage info
+coals_version="0.1.7.1"
+# 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
 
@@ -156,11 +155,16 @@ coals_install() {
 
 
 coals_checkver() {
-   # Set delimiter to '.'
+   # Set delimiter to '.' and make arrays of version numbers
    local IFS=. cver_exist cver_this cver_this_isnewer
-   # Compare versions
    cver_this=($coals_version)
-   read -r -a cver_exist <<< "$(cat "./.local/bin/coals" | tail -n +2 | head -n 1 | grep -oP "\d+\.\d+\.\d+")"
+   cver_exist=($(grep -oPm 1 "(?<=coals_version=\")(\d+\.)+\d+(?=\")" < "$HOME/.local/bin/coals"))
+   
+   # Equalise lenth of arrays
+   for g in $(seq -s. $(( ${#cver_this[@]} - ${#cver_exist[@]} ))); do cver_exist+=(0); done 
+   for h in $(seq -s. $(( ${#cver_exist[@]} - ${#cver_this[@]} ))); do cver_this+=(0); done
+
+   # Compare versions
    for i in "${!cver_exist[@]}"; do
       [ "${cver_this[i]}" -lt "${cver_exist[i]}" ] && { cver_this_isnewer=0; break; }
       [ "${cver_this[i]}" -gt "${cver_exist[i]}" ] && { cver_this_isnewer=1; break; }
@@ -192,7 +196,7 @@ All other commands (including invalid ones) are passed through directly to 'coal
    coals help                   # show this help message and the 'coal' help message
    coals mine                   # mine for coal
    coals mine forever           # mine for coal and auto-restart on error
-   coals smelt                  # smelt for iron ingots (cost 300 coal and 0.05 ore per ingot)
+   coals smelt                  # smelt for iron ingots (cost 75 coal and 0.01 ore per ingot)
    coals smelt forever          # smelt for iron ingots and auto-restart on error
    coals chop                   # chop for wood
    coals replant                # replant trees after chopping
@@ -222,7 +226,6 @@ All other commands (including invalid ones) are passed through directly to 'coal
    "
 }
 
-
 #------------------------------------------------------------------------------
 
 # Run installer if script filename ends with 'coals.sh'
@@ -231,6 +234,3 @@ All other commands (including invalid ones) are passed through directly to 'coal
 # Otherwise run the main function
 echo "coals $coals_version"
 coal_start "$@"
-
-
-#------------------------------------------------------------------------------
