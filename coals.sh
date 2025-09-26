@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.9.2"
+coals_version="0.1.9.3"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -7,7 +7,7 @@ coal_start() {
    case "$1" in
       "") coals_help ; exit ;;
       "help") printf '\e[1;32m%s\e[m%s\n' "coals" " help:" ; coals_help ; printf '\n\e[1;32m%s\e[m%s\n' "coal" " help:" ; coal help ; exit ;;
-      "update") curl -sSL "https://raw.githubusercontent.com/zoonose/coalness/main/coals.sh" | bash ; exit ;;
+      "update") coals_update ; exit ;;
       "uninstall") coals_uninstall ; exit ;;
    esac
 
@@ -140,6 +140,14 @@ coals_loop() {
    exit
 }
 
+coals_update() {
+   local fetch_temp
+   fetch_temp=$(mktemp)
+   echo "Downloading latest version..."
+   curl -sL "https://raw.githubusercontent.com/zoonose/coalness/main/coals.sh" -o "$fetch_temp" || { echo "Failed to download" && exit 1 ;}
+   [ -f "$fetch_temp" ] && bash "$fetch_temp" || { echo "Something went wrong" ; exit 1 ;}
+   [ -f "$fetch_temp" ] && rm "$fetch_temp"
+}
 
 coals_install() {
    echo "Installing coals $coals_version"
@@ -238,6 +246,7 @@ All other commands (including invalid ones) are passed through directly to 'coal
 #------------------------------------------------------------------------------
 
 # Run installer if script filename ends with 'coals.sh'
+[ -f "$0" ] || { echo "Not like this" ; exit 1 ;}
 [[ "$0" != "$HOME/.local/bin/coals" ]] && { coals_install ; exit ;}
 
 # Otherwise run the main function
