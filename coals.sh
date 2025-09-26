@@ -1,38 +1,20 @@
 #!/usr/bin/env bash
-coals_version="0.1.8.3"
+coals_version="0.1.9.2"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
 
-   [ "$1" == "" ] && { coals_help ; exit 0 ;}
-   [ "$1" == "help" ] && { printf '\e[1;32m%s\e[m%s\n' "coals" " help:" ; coals_help ; printf '\n\e[1;32m%s\e[m%s\n' "coal" " help:" ; coal help ; exit 0 ;}
-
-   [ "$1" == "update" ] && { coals_update ; exit ;}
-
-   [ "$1" == "uninstall" ] && [ "$0" == "$HOME/.local/bin/coals" ] && {
-      printf '\e[1;33m%s\e[m' "Uninstalling coals..."
-      rm "$HOME/.local/bin/coals" && {
-         [ -f "$HOME/.config/solana/coals_config.yml" ] && {
-            printf '%s\n\e[1;37m%s\e[m%s\e[1;37m%s\e[m' "DONE" "Delete config file" " $HOME/.config/solana/coals_config.yml" "? [Y/N]: "
-            rm -i "$HOME/.config/solana/coals_config.yml" 2>/dev/null && { echo "OK" ; exit 0 ;}
-         }
-      } || { echo "failed :(" ; exit 1 ;}
-   }
+   case "$1" in
+      "") coals_help ; exit ;;
+      "help") printf '\e[1;32m%s\e[m%s\n' "coals" " help:" ; coals_help ; printf '\n\e[1;32m%s\e[m%s\n' "coal" " help:" ; coal help ; exit ;;
+      "update") curl -sSL "https://raw.githubusercontent.com/zoonose/coalness/main/coals.sh" | bash ; exit ;;
+      "uninstall") coals_uninstall ; exit ;;
+   esac
 
    # Check if 'solana' and 'coal' are installed
    for i in solana coal ; do
       [ ! "$(which $i)" ] && { echo "Error: $i not installed wyd" ; exit 1 ;}
    done
-
-   # [ "$#" -gt 2 ] && echo "Error: too many args (argh!)" && exit 1
-   # Switch to infinite loop mode if specified
-   [ "$2" == "forever" ] && {
-      case "$1" in
-         "mine") { looptask="mine" ; export -f coal_start ; coals_loop ; exit 0 ;} ;;
-         "smelt") { looptask="smelt" ; export -f coal_start ; coals_loop ; exit 0 ;} ;;
-         *) { echo "'forever' is only for 'mine' or 'smelt'." ; exit 1 ;} ;;
-      esac
-   }
 
    # Auto set a different 'solana' config for each username (or don't)
    case "$USER" in
@@ -40,10 +22,20 @@ coal_start() {
       *) _cfg="--config $HOME/.config/solana/coals_config.yml" ;; # fallback to default
    esac
 
+   # Switch to infinite loop mode if specified
+   [ "$2" == "forever" ] && {
+      case "$1" in
+         "mine") { looptask="mine" ; export -f coal_start ; coals_loop ;} ;;
+         "smelt") { looptask="smelt" ; export -f coal_start ; coals_loop ;} ;;
+         *) { echo "'forever' is only for 'mine' or 'smelt'." ;} ;;
+      esac
+      exit
+   }
+
    # Set 'coal' parameters
    # - pay high fee to reprocess for $CHROMIUM and enhance tools because reward is timing dependent
    buffer_time=2
-   prio_smol=50
+   prio_smol=111
    prio_big=2112112
 
    case "$1" in
@@ -73,13 +65,13 @@ coal_start() {
                      case "$i" in
                         "sol") [ "$h" == "Balance" ] &&
                            while read line ; do
-                              [[ "$line" == *"Error"* ]] && { echo Error, check connection ; echo exit ;} ||
+                              [[ "$line" == *"Error"* ]] && { echo Error, check connection ; exit 1 ;} ||
                               printf '%12.4f %s\n' "$(grep -oP "\d+(\.\d+)?" <<< "$line")" "SOL";
-                           done <<< "$(solana balance 2>&1)" ;;
+                           done <<< "$(solana balance $_cfg 2>&1)" ;;
                         "coal"|"ingot"|"wood")
-                           printf '%12.4f %s\n' "$(coal balance --resource "$i" | grep -ioP "(?<=$h:\ )\d+(\.\d+)?")" "${i^^}" ;;
+                           printf '%12.4f %s\n' "$(coal balance --resource "$i" $_cfg | grep -ioP "(?<=$h:\ )\d+(\.\d+)?")" "${i^^}" ;;
                         "chromium") [ "$h" == "Balance" ] &&
-                           printf '%12.4f %s\n' "$(coal balance --resource "$i" | grep -ioP "(?<=$h:\ )\d+(\.\d+)?")" "${i^^}" ;;
+                           printf '%12.4f %s\n' "$(coal balance --resource "$i" $_cfg | grep -ioP "(?<=$h:\ )\d+(\.\d+)?")" "${i^^}" ;;
                         "ore") [ "$h" == "Balance" ] &&
                            printf '%12.4f %s\n' "$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp $_cfg)" "${i^^}" ;;
                      esac
@@ -94,12 +86,13 @@ coal_start() {
    # Print 'solana' config filename, wallet address, SOL balance, and 'coal' parameters
    printf '\e[1;30m'
    printf '%s\n' "$_cfg" | grep -oP "[^/]*$" # hmm
-   printf '%s\n' "$(solana address $_cfg || echo "address not found"; solana balance $_cfg || echo "balance not found")"
+   printf '%s\n' "$(solana address $_cfg || echo "address not found" ; solana balance $_cfg || echo "balance not found")"
    printf '%s\n' "$_params"
    printf '\e[m'
 
    # omg it's happening omg
    bash -c "coal $_cfg $_params"
+   [[ "$0" != *"coals" ]] && echo "ERROR: Tantrum >:("
 }
 
 
@@ -107,21 +100,21 @@ coal_start() {
 coals_loop() {
 
    # Make ^C exit look a bit cleaner
-   trap 'sleep 3 ; printf "\e[1A\n" ; [ -f "$_log" ] && rm "$_log"' EXIT
+   trap 'kill $(pidof coal) $_app_pid 2>/dev/null ; [ -f "$_log" ] && rm "$_log" ; sleep 3 ; echo' EXIT
 
    # Terminal command to monitor with 'script'
-   _app="while : ; do coal_start $looptask ; echo \"ERROR: Tantrum >:(\" ; done"
-   _log=$(mktemp)
+   _app="coal_start $looptask"
+   _log="$(mktemp --suffix ".coals.log")"
    printf "\n\n"
 
-   while :; do
-
+   while : ; do
+      kill $(pidof coal) $_app_pid 2>/dev/null
       # Print timestamp and say GMM
       printf "\e[2A\e[2K\e[1G\e[m%(%Y-%m-%d %H:%M:%S)T\n\n"
       printf "\e[1A\e[2K\e[1G\e[1;33mGMM\e[1;37m...\e[m\n\e[2K"
 
       # Get SOL balance (retry if not found (ie no internet) - ragequit if poor)
-      sol_bal="$(solana balance --lamports 2>&1 | awk '{print $1}')"
+      sol_bal="$(solana balance --lamports $_cfg 2>&1 | awk '{print $1}')"
       [[ "$sol_bal" == "Error"* ]] && { printf '%s\n' "Balance not found, retrying..." ; sleep 10 ; continue ;}
       [ "$sol_bal" -lt 10000000 ] && { printf '\n\e[1;31m%s\e[m%s\n\n' "ERROR: " "Not enough SOL :(" ; break ;}
 
@@ -133,21 +126,24 @@ coals_loop() {
       _app_pid=$!
 
       # Kill if death or when log file becomes chonkish
-      tail -F "$_log" | while read -r line; do
-         [ "$(wc -c < "$_log")" -gt 6942069 ] && kill HUP "$_app_pid" 2>/dev/null && { printf '\n%s\n' "Flushing temp file" ; break ;}
-         [[ "$line" == *"ERROR"* ]] && { for i in {1..5} ; do printf '\U274c ' ; done ; echo ; kill "$_app_pid" 2>/dev/null ; break ;}
+      tail -F -n +2 "$_log" | while read -r -t 30 -n 15970 line; do
+         [ "$(wc -c < "$_log")" -gt 6942069 ] && kill HUP "$_app_pid" 2>/dev/null && { printf '\n\n%s\n' "Flushing temp file" ; break ;}
+         [ "$(grep -oi "error" <<< "$line")" != "" ] && { for i in {1..5} ; do printf '\U274c ' ; done ; echo ; kill $_app_pid 2>/dev/null ; break ;}
       done
+
+      [ "$(tail "$_log" | grep -P '(error: 0x1)|(foreman)')" != "" ] && { printf '\n%s\n' "RUH ROH This is probably due to insufficient balance. eg., not enough coal to run the smelter!" ; break ;}
 
       # Hold horses
       sleep 3
       for (( D=7 ; D>0 ; D-- )) ; do printf '\e[m\e[1G%s\e[1;33m%d' "Restarting in " "$D" ; sleep 1 ; done
    done
+   exit
 }
 
 
 coals_install() {
-   echo "Installing 'coals' $coals_version"
-
+   echo "Installing coals $coals_version"
+   echo
    # Check for and remove previous version
    [ -f "$HOME/.local/bin/coals" ] && coals_checkver && { printf '%s' "Removing previous version..." ; rm "$HOME/.local/bin/coals" ;} && echo "done"
 
@@ -163,7 +159,7 @@ coals_install() {
    [ ! -f "$coalfig" ] && { printf '%s\n%s\n%s\n%s\n%s\n' "---" "json_rpc_url: 'https://api.mainnet-beta.solana.com'" "websocket_url: ''" "keypair_path: '$HOME/.config/solana/id.json'" "commitment: 'processed'" > "$coalfig" ; echo "Created default config file at $coalfig" ;}
 
    # Check that ~/.local/bin exists and move this script there and rename to 'coals' and make it executable and report result
-   [ -d "$HOME/.local/bin" ] && mv "$0" "$HOME/.local/bin/coals" && chmod +x "$HOME/.local/bin/coals" && echo "Installed in $HOME/.local/bin" || { echo "Failed to install" ; exit 1 ;}
+   [ -d "$HOME/.local/bin" ] && mv "$0" "$HOME/.local/bin/coals" && chmod +x "$HOME/.local/bin/coals" && printf '\n%s\n%s\n\n' "Installed in $HOME/.local/bin" "run 'coals' to see a list of commands" || { echo "Failed to install" ; exit 1 ;}
 }
 
 
@@ -185,19 +181,18 @@ coals_checkver() {
 
    # Exit if same or older version than installed
    case "$cver_this_isnewer" in
-      "") { echo "coals $coals_version already installed (run 'coals uninstall' to remove)" ; exit 0 ;} ;;
-      0) { echo "Error: newer version (${cver_exist[*]}) already installed (run 'coals uninstall' to remove)" ; exit 1 ;} ;;
+      "") { echo "Oops: coals $coals_version already installed (run 'coals uninstall' to remove it)" ; exit 0 ;} ;;
+      0) { echo "Oops: newer version (${cver_exist[*]}) already installed (run 'coals uninstall' to remove it)" ; exit 1 ;} ;;
    esac
 }
 
 
-coals_update() {
-   local fetch_temp
-   fetch_temp=$(mktemp --suffix ".coals.sh")
-   echo "Downloading latest version..."
-   curl -sL "https://raw.githubusercontent.com/zoonose/coalness/main/coals.sh" -o "$fetch_temp" || { echo "Failed to download" && exit 1 ;}
-   [ -f "$fetch_temp" ] && bash "$fetch_temp" || { echo "Something went wrong" ; exit 1 ;}
-   [ -f "$fetch_temp" ] && rm "$fetch_temp"
+coals_uninstall() {
+   printf '\e[1;33m%s\e[m' "Uninstalling coals..."
+   [ "$0" == "$HOME/.local/bin/coals" ] && rm "$HOME/.local/bin/coals" && [ -f "$HOME/.config/solana/coals_config.yml" ] && {
+      printf '%s\n\n\e[1;37m%s\e[m%s\e[1;37m%s\e[m' "DONE" "Delete config file" " $HOME/.config/solana/coals_config.yml" "? [Y/N]: "
+      rm -i "$HOME/.config/solana/coals_config.yml" 2>/dev/null && { echo "OK" ; exit 0 ;} ;}
+      echo "failed :(" ; exit 1
 }
 
 
@@ -237,13 +232,13 @@ All other commands (including invalid ones) are passed through directly to 'coal
    coals version                # show version numbers of 'coals' and 'coal'
    coals update                 # update 'coals' to latest version
    coals uninstall              # uninstall 'coals'
-   "
+"
 }
 
 #------------------------------------------------------------------------------
 
 # Run installer if script filename ends with 'coals.sh'
-[[ "$0" == *"coals.sh" ]] && { coals_install ; exit 0 ;}
+[[ "$0" != "$HOME/.local/bin/coals" ]] && { coals_install ; exit ;}
 
 # Otherwise run the main function
 echo "coals $coals_version"
