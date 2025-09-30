@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.10"
+coals_version="0.1.10.1"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -115,14 +115,14 @@ coals_loop() {
       done
 
       # Catch (probable) smelter failure and break the loop
-      [ "$(tail "$_log" | grep -P '(error: 0x1)|(foreman)')" != "" ] && { printf '\n%s\n' "RUH ROH Probably not enough coal for the smelter!" ; break ;}
+      [ "$looptask" == "smelt" ] && [ "$(tail "$_log" | grep -P '(error: 0x1)|(foreman)')" != "" ] && { printf '\n%s\n' "RUH ROH Probably not enough coal for the smelter!" ; break ;}
 
-      # Catch ecocide, replant, and break the loop
-      [ "$(tail "$_log" | grep -P '(Needs reset)')" != "" ] && { printf '\n%s\e[48;5;130m\e[38;5;226m%s\e[38;5;21m%s\e[38;5;220m%s\e[m\n%s\n\n' "RUH ROH All the trees have been chopped! Lorax is judging you  " ">" ":" "{ " "Remember to replant so the forest can grow back!" ; break ;}
+      # Catch ecocide and break the loop
+      [ "$looptask" == "chop" ] && [ "$(tail "$_log" | grep -P '(Needs reset)')" != "" ] && { printf '\n%s\e[48;5;130m\e[38;5;226m%s\e[38;5;21m%s\e[38;5;220m%s\e[m\n%s\n\n' "RUH ROH All the trees have been chopped! Lorax is judging you  " ">" ":" "{ " "Remember to replant so the forest can grow back!" ; break ;}
 
       # Hold horses
       sleep 3
-      for (( D=7 ; D>0 ; D-- )) ; do printf '\e[m\e[1G%s\e[1;33m%d' "Restarting in " "$D" ; sleep 1 ; done
+      for (( D=7 ; D>0 ; D-- )) ; do printf '\e[m\e[1G%s\e[1;33m%d\e[m' "Restarting in " "$D" ; sleep 1 ; done
    done
    exit
 }
