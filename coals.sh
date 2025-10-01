@@ -259,7 +259,7 @@ Notes:
    (5000 lamport base fee plus $prio_smol lamport priority fee per transaction)
    (smelting also burns coal and wraps ore (see below))
 
-- cost of reprocessing and enhancing is $(( $prio_big + 5000 )) lamports ($(awk -v var="$prio_big" 'BEGIN {printf "%.2g", (var+5000)/10^9}') sol) per transaction.
+- cost of reprocessing and enhancing is $(( ($prio_big + 5000) * 2 )) lamports ($(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol) per transaction.
 
 - to adjust fees, edit '~/.local/bin/coals' and change ['prio_smol'|'prio_big'] variables near the top.
 - to leave some of the CPU unused while doing work, edit '~/.local/bin/coals' and change 'freecores'.
@@ -277,7 +277,7 @@ Every 'coals' command:
    coals smelt                  # smelt for iron ingots (cost 75 coal and 0.01 ore per ingot)
    coals chop                   # chop for wood
    coals replant                # replant trees after chopping
-   coals reprocess              # reprocess for chromium (cost $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", (var+5000)/10^9}') sol)
+   coals reprocess              # reprocess for chromium (cost $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol)
    coals craft                  # craft a new pickaxe (cost 3 ingot and 2 wood)
    coals inspect                # inspect currently equipped pickaxe
    coals unequip                # unequip currently equipped pickaxe
