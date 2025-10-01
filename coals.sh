@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.11"
+coals_version="0.1.11.1"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
