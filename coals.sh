@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.10.1"
+coals_version="0.1.11"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -129,32 +129,58 @@ coals_loop() {
 
 
 coals_balance() {
+   declare -A coals_bals coals_stakes
+   declare -a pids
+   balance_order=(sol coal ingot wood chromium ore)
+   stake_order=(coal ingot wood)
+   results=$(mktemp) ; trap "rm -f $results" EXIT
 
-   printf '\e[1;30m%s\e[m\n' "$(grep -oP "[^/]*$" <<< "$_cfg")"
+   make_fetch_happen() {
+      local resource="$1" output type
 
-   declare -A coals_stakes
-   printf '\e[1;37m%s\e[m\n' "Balance:"
-   for i in "sol" "coal" "ingot" "wood" "chromium" "ore" ; do
-      case "$i" in
-         "sol")
-            while read line ; do
-               [[ "$line" == *"Error"* ]] && { echo Error, check connection ; exit 1 ;} ||
-               printf '%12.4f %s\n' "$(grep -oP "\d+(\.\d+)?" <<< "$line")" "SOL";
-            done <<< "$(solana balance $_cfg 2>&1)" ;;
-         "coal"|"ingot"|"wood"|"chromium")
-            while read line; do
-               [[ "$line" == "Balance"* ]] && printf '%12.4f %s\n' "$(grep -ioP "\d+(\.\d+)?" <<< "$line")" "${i^^}"
-               [[ "$line" == "Stake"* ]] && coals_stakes[$i]="$(grep -ioP "\d+(\.\d+)?" <<< "$line")"
-            done <<< "$(coal balance --resource $i $_cfg)" ;;
-         "ore")
-            printf '%12.4f %s\n' "$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp $_cfg)" "${i^^}" ;;
+      case $resource in
+         sol) output="$(solana balance $_cfg 2>&1)" ;;
+         ore) output="$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp $_cfg 2>/dev/null)" ;;
+         *) output="$(coal balance --resource "$resource" $_cfg 2>/dev/null)" ;;
       esac
+
+      while read -r line; do
+         [[ "$line" == *"Error"* ]] && sleep 11
+         [[ "$line" == "Stake"* ]] && type="stake" || type="balance"
+         value="$(grep -ioP "\d+(\.\d+)?" <<< "$line")"
+         echo "${resource}:${type}:${value}"
+      done <<< "$output"
+   }
+
+   printf '%s' "Fetching..."
+
+   # get balances
+   for i in "${balance_order[@]}" ; do
+      make_fetch_happen "$i" >> "$results" &
+      pids+=($!)
    done
 
-   printf '\e[1;37m%s\e[m\n' "Stake:"
-   for i in $(echo "${!coals_stakes[@]}" | tr " " "\n" | sort) ; do
-      printf '%12.4f %s\n' "${coals_stakes[$i]}" "${i^^}"
-   done
+   # timeout countdown
+   (for t in {0..10} ; do sleep 1 ; printf '.' ; done ; kill "${pids[@]}" 2>/dev/null) & timeoutpid="$!"
+
+   # wait for fetch
+   for pid in "${pids[@]}"; do wait "$pid" 2>/dev/null ; done
+
+   # quit if timed out
+   kill -0 "$timeoutpid" 2>/dev/null || { printf '\e[2K\r%s\n' "Error fetching balances :(" ; exit ;} ; kill "$timeoutpid"
+
+   # put results in arrays
+   while IFS=':' read -r resource type value; do
+      case $type in
+         "balance") coals_bals[$resource]=$value ;;
+         "stake") coals_stakes[$resource]=$value ;;
+      esac
+   done < "$results"
+
+   # print it
+   printf '\e[2K\r'
+   printf '\e[1;37m%s\e[m\n' "Balance:" ; for B in "${balance_order[@]}" ; do printf '%12.4f %s\n' "${coals_bals[$B]}" "${B^^}" ; done
+   printf '\e[1;37m%s\e[m\n' "Stake:" ; for S in "${stake_order[@]}" ; do printf '%12.4f %s\n' "${coals_stakes[$S]}" "${S^^}" ; done
 }
 
 
