@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.11.4"
+coals_version="0.1.11.5"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -133,7 +133,7 @@ coals_balance() {
    declare -A coals_bals coals_stakes
    balance_order=(sol coal ingot wood chromium ore)
    stake_order=(coal ingot wood)
-   results=$(mktemp) ; trap "rm -f $results" EXIT
+   results=$(mktemp) ; trap 'kill "${pids[@]}" "$timeoutpid" 2>/dev/null ; rm -f $results' EXIT
 
    make_fetch_happen() {
       local resource="$1" output type
