@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.11.2"
+coals_version="0.1.11.4"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -9,7 +9,7 @@ coal_start() {
    freecores=0       # number of CPU cores to leave unused when mining/smelting/chopping
    buffer_time=2     # seconds
    prio_smol=111     # lamports
-   prio_big=2112112  # lamports
+   prio_big=2000002  # lamports
 
    case "$1" in
       "") coals_help ; exit ;;
@@ -26,7 +26,8 @@ coal_start() {
    # Auto set a different 'solana' config for each username (or don't)
    case "$USER" in
       # "<your_username_here>") _cfg="--config $HOME/.config/solana/<whatever_config_file_you_want_to_use>.yml" ;;
-      # "asd"?) freecores=2 ;;&
+      # "asdf"|"asdg") freecores=5 ;;&
+      # "asdc") freecores=4 ;;&
       *) _cfg="--config $HOME/.config/solana/coals_config.yml" ;; # fallback to default
    esac
 
@@ -136,19 +137,38 @@ coals_balance() {
 
    make_fetch_happen() {
       local resource="$1" output type
-
       case $resource in
          sol) output="$(solana balance $_cfg 2>&1)" ;;
          ore) output="$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp $_cfg 2>/dev/null)" ;;
          *) output="$(coal balance --resource "$resource" $_cfg 2>/dev/null)" ;;
       esac
-
       while read -r line; do
          [[ "$line" == *"Error"* ]] && sleep 11
          [[ "$line" == "Stake"* ]] && type="stake" || type="balance"
          value="$(grep -ioP "\d+(\.\d+)?" <<< "$line")"
-         echo "${resource}:${type}:${value}"
+         echo "${resource},${type},${value}"
       done <<< "$output"
+   }
+
+   tool_time_equipped() {
+      local output="$(coal inspect $_cfg 2>/dev/null)"
+      if [ "$output" != "" ] ; then
+         printf 'tool,equipped,%s\n' "$(grep -oP "(?<=Inspected:\s)([1-9A-HJ-NP-Za-km-z]{32,44})" <<< "$output")"
+         printf 'tool,equipped,%s\n' "Durability: $(grep -oP "(?<=Durability:\s)(\d+(\.\d+)?)" <<< "$output")"
+      else
+         printf 'tool,equipped,%s\n' "None"
+      fi
+   }
+
+   tool_time_spent() {
+      local sol_address="$(solana address $_cfg 2>/dev/null)"
+      local rpc_output="$(curl -s -X POST -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"searchAssets\",\"params\":{\"interface\":\"MplCoreAsset\",\"ownerAddress\":\"$sol_address\"}}" "https://api.mainnet-beta.solana.com")"
+      local jq_output="$(jq -r '.result.items[]? | select(.burnt == false)? | select(.plugins.attributes.data.attribute_list[]? | select(.key == "durability")? | select(.value == "0")?)? | .id' <<< "$rpc_output")"
+      if [ "$jq_output" != "" ] ; then
+         while read line; do printf 'tool,spent,%s\n' "$line" ; done <<< "$jq_output"
+      else
+         printf 'tool,spent,%s\n' "None"
+      fi
    }
 
    printf '%s' "Fetching..."
@@ -159,8 +179,18 @@ coals_balance() {
       pids+=($!)
    done
 
+   # get equipped tool info
+   tool_time_equipped "$i" >> "$results" &
+   pids+=($!)
+
+   # get spent tool addresses if 'jq' is installed
+   [ "$(which jq)" != "" ] && {
+      tool_time_spent "$i" >> "$results" &
+      pids+=($!)
+   }
+
    # timeout countdown
-   (for t in {0..10} ; do sleep 1 ; printf '.' ; done ; kill "${pids[@]}" 2>/dev/null) & timeoutpid="$!"
+   (for t in {0..9} ; do sleep 1 ; printf '.' ; done ; kill "${pids[@]}" 2>/dev/null) & timeoutpid="$!"
 
    # wait for fetch
    for pid in "${pids[@]}"; do wait "$pid" 2>/dev/null ; done
@@ -169,10 +199,12 @@ coals_balance() {
    kill -0 "$timeoutpid" 2>/dev/null || { printf '\e[2K\r%s\n' "Error fetching balances :(" ; exit ;} ; kill "$timeoutpid"
 
    # put results in arrays
-   while IFS=':' read -r resource type value; do
+   while IFS=',' read -r resource type value; do
       case $type in
          "balance") coals_bals[$resource]=$value ;;
          "stake") coals_stakes[$resource]=$value ;;
+         "equipped") tool_equipped+=("$value") ;;
+         "spent") tool_spent+=("$value") ;;
       esac
    done < "$results"
 
@@ -180,6 +212,8 @@ coals_balance() {
    printf '\e[2K\r'
    printf '\e[1;37m%s\e[m\n' "Balance:" ; for B in "${balance_order[@]}" ; do printf '%12.4f %s\n' "${coals_bals[$B]}" "${B^^}" ; done
    printf '\e[1;37m%s\e[m\n' "Stake:" ; for S in "${stake_order[@]}" ; do printf '%12.4f %s\n' "${coals_stakes[$S]}" "${S^^}" ; done
+   printf '\e[1;37m%s\e[m\n' "Equipped tool:" ; for T in "${!tool_equipped[@]}" ; do printf '\t%s\n' "${tool_equipped[$T]}" ; done
+   [ "${#tool_spent[@]}" -gt 0 ] && { printf '\e[1;37m%s\e[m\n' "Spent tools:" ; for T in "${!tool_spent[@]}" ; do printf '\t%s\n' "${tool_spent[$T]}" ; done ;}
 }
 
 
@@ -254,20 +288,16 @@ coals_help() {
    cat <<< "GMM!
 
 Notes:
-- cost of mining/smelting/chopping is approx $(awk -v var="$prio_smol" 'BEGIN {printf "%.2g", (var+5000)*60/10^9}') sol per hour.
+- Cost of mining/smelting/chopping is approx $(awk -v var="$prio_smol" 'BEGIN {printf "%.2g", (var+5000)*60/10^9}') sol per hour.
    (5000 lamport base fee plus $prio_smol lamport priority fee per transaction)
    (smelting also burns coal and wraps ore (see below))
-
-- cost of reprocessing and enhancing is $(( ($prio_big + 5000) * 2 )) lamports ($(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol) per transaction.
-
-- to adjust fees, edit '~/.local/bin/coals' and change ['prio_smol'|'prio_big'] variables near the top.
-- to leave some of the CPU unused while doing work, edit '~/.local/bin/coals' and change 'freecores'.
-
-- to use a different solana keypair, edit '~/.config/solana/coals_config.yml'.
-
-- mining/smelting/chopping will auto-restart on non-fatal errors.
-
-- commands not listed here (including invalid & typos) will be passed through to 'coal'.
+- Cost of reprocessing and enhancing is $(( ($prio_big + 5000) * 2 )) lamports ($(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol) per transaction.
+- To adjust fees, edit '~/.local/bin/coals' and change ['prio_smol'|'prio_big'] variables near the top.
+- To leave some of the CPU unused while doing work, edit '~/.local/bin/coals' and change 'freecores'.
+- To use a different solana keypair, edit '~/.config/solana/coals_config.yml'.
+- Mining/smelting/chopping will auto-restart on non-fatal errors.
+- Spent tool addresses will be shown in 'coals balance' if 'jq' is installed.
+- Commands not listed here (including invalid & typos) will be passed through to 'coal'.
 
 Every 'coals' command:
    coals                        # show this help message
