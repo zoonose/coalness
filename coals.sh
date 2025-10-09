@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.11.5"
+coals_version="0.1.11.6"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -26,7 +26,7 @@ coal_start() {
    # Auto set a different 'solana' config for each username (or don't)
    case "$USER" in
       # "<your_username_here>") _cfg="--config $HOME/.config/solana/<whatever_config_file_you_want_to_use>.yml" ;;
-      # "asdf"|"asdg") freecores=5 ;;&
+      # "asdf"|"asdg") freecores=2 ;;&
       # "asdc") freecores=4 ;;&
       *) _cfg="--config $HOME/.config/solana/coals_config.yml" ;; # fallback to default
    esac
@@ -116,7 +116,7 @@ coals_loop() {
       done
 
       # Catch (probable) smelter failure and break the loop
-      [ "$looptask" == "smelt" ] && [ "$(tail "$_log" | grep -P '(error: 0x1)|(foreman)')" != "" ] && { printf '\n%s\n' "RUH ROH Probably not enough coal for the smelter!" ; break ;}
+      [ "$looptask" == "smelt" ] && [ "$(tail "$_log" | grep -P '(error: 0x1)|(foreman)')" != "" ] && { printf '\n%s\n' "RUH ROH Probably not enough coal/ore for the smelter!" ; break ;}
 
       # Catch ecocide and break the loop
       [ "$looptask" == "chop" ] && [ "$(tail "$_log" | grep -P '(Needs reset)')" != "" ] && { printf '\n%s\e[48;5;130m\e[38;5;226m%s\e[38;5;21m%s\e[38;5;220m%s\e[m\n%s\n\n' "RUH ROH All the trees have been chopped! Lorax is judging you  " ">" ":" "{ " "Remember to replant so the forest can grow back!" ; break ;}
@@ -130,7 +130,7 @@ coals_loop() {
 
 
 coals_balance() {
-   declare -A coals_bals coals_stakes
+   declare -A coals_bals coals_stakes tools_unequipped
    balance_order=(sol coal ingot wood chromium ore)
    stake_order=(coal ingot wood)
    results=$(mktemp) ; trap 'kill "${pids[@]}" "$timeoutpid" 2>/dev/null ; rm -f $results' EXIT
@@ -155,20 +155,22 @@ coals_balance() {
       if [ "$output" != "" ] ; then
          printf 'tool,equipped,%s\n' "$(grep -oP "(?<=Inspected:\s)([1-9A-HJ-NP-Za-km-z]{32,44})" <<< "$output")"
          printf 'tool,equipped,%s\n' "Durability: $(grep -oP "(?<=Durability:\s)(\d+(\.\d+)?)" <<< "$output")"
-      else
-         printf 'tool,equipped,%s\n' "None"
+      # else
+         # printf 'tool,equipped,%s\n' "None"
       fi
    }
 
-   tool_time_spent() {
+   tool_time_unequipped() {
+      # not the finest of chonks ... lol ... but for now, it works so whatevaa
+      local -A tools_blahblah
+      local rpc_output jq_output jq_output_cull tool_address tool_durability 
       local sol_address="$(solana address $_cfg 2>/dev/null)"
-      local rpc_output="$(curl -s -X POST -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"searchAssets\",\"params\":{\"interface\":\"MplCoreAsset\",\"ownerAddress\":\"$sol_address\"}}" "https://api.mainnet-beta.solana.com")"
-      local jq_output="$(jq -r '.result.items[]? | select(.burnt == false)? | select(.plugins.attributes.data.attribute_list[]? | select(.key == "durability")? | select(.value == "0")?)? | .id' <<< "$rpc_output")"
-      if [ "$jq_output" != "" ] ; then
-         while read line; do printf 'tool,spent,%s\n' "$line" ; done <<< "$jq_output"
-      else
-         printf 'tool,spent,%s\n' "None"
-      fi
+      rpc_output="$(curl -s -X POST -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"searchAssets\",\"params\":{\"interface\":\"MplCoreAsset\",\"ownerAddress\":\"$sol_address\"}}" "https://api.mainnet-beta.solana.com")"
+      jq_output_cull="$(jq -r '.result.items[]? | select(.burnt == false)? | select(.content.files[])? | .id' <<< "$rpc_output")"
+      jq_output="$(jq -r '.result.items[]? | select(.burnt == false)? | select(.plugins.attributes.data.attribute_list[]? | select(.key == "durability")? | select(.value)?)? | "\(.id),\((.plugins.attributes.data.attribute_list[] | select(.key == "durability") |.value))"' <<< "$rpc_output")"
+      [ "$jq_output" != "" ] && while IFS=, read tool_address tool_durability; do tools_blahblah["$tool_address"]="$tool_durability" ; done <<< "$jq_output"
+      while read line; do unset tools_blahblah[$line] ; done <<< "$jq_output_cull"
+      for i in ${!tools_blahblah[@]}; do printf '%s,unequipped,%s\n' "$i" "${tools_blahblah[$i]}" ; done
    }
 
    printf '%s' "Fetching..."
@@ -185,12 +187,12 @@ coals_balance() {
 
    # get spent tool addresses if 'jq' is installed
    [ "$(which jq)" != "" ] && {
-      tool_time_spent "$i" >> "$results" &
+      tool_time_unequipped "$i" >> "$results" &
       pids+=($!)
    }
 
    # timeout countdown
-   (for t in {0..9} ; do sleep 1 ; printf '.' ; done ; kill "${pids[@]}" 2>/dev/null) & timeoutpid="$!"
+   (for t in {0..7} ; do sleep 1 ; printf '.' ; done ; kill "${pids[@]}" 2>/dev/null) & timeoutpid="$!"
 
    # wait for fetch
    for pid in "${pids[@]}"; do wait "$pid" 2>/dev/null ; done
@@ -204,7 +206,7 @@ coals_balance() {
          "balance") coals_bals[$resource]=$value ;;
          "stake") coals_stakes[$resource]=$value ;;
          "equipped") tool_equipped+=("$value") ;;
-         "spent") tool_spent+=("$value") ;;
+         "unequipped") tools_unequipped[$resource]="$value" ;;
       esac
    done < "$results"
 
@@ -212,8 +214,19 @@ coals_balance() {
    printf '\e[2K\r'
    printf '\e[1;37m%s\e[m\n' "Balance:" ; for B in "${balance_order[@]}" ; do printf '%12.4f %s\n' "${coals_bals[$B]}" "${B^^}" ; done
    printf '\e[1;37m%s\e[m\n' "Stake:" ; for S in "${stake_order[@]}" ; do printf '%12.4f %s\n' "${coals_stakes[$S]}" "${S^^}" ; done
-   printf '\e[1;37m%s\e[m\n' "Equipped tool:" ; for T in "${!tool_equipped[@]}" ; do printf '\t%s\n' "${tool_equipped[$T]}" ; done
-   [ "${#tool_spent[@]}" -gt 0 ] && { printf '\e[1;37m%s\e[m\n' "Spent tools:" ; for T in "${!tool_spent[@]}" ; do printf '\t%s\n' "${tool_spent[$T]}" ; done ;}
+   printf '\e[1;37m%s\e[m\n' "Tools:" ;
+   if [ "$(( "${#tool_equipped[@]}" + "${#tools_unequipped[@]}" ))" -eq 0 ] ; then
+      printf '\t%s\n' "None"
+   else
+      printf '\e[1;30m\e[7G%s\e[54G%s\e[m\n' "Address" "Durability"
+      [ "${#tool_equipped[@]}" -gt 0 ] && {
+         printf '\e[4G\e[1;30m%s\e[m\e[7G%s\e[54G%10.5f\e[66G\e[1;30m%s\e[m\n' "*" "${tool_equipped[0]}" "$(grep -oP "\d+(\.\d+)?" <<< "${tool_equipped[1]}")" "<- Equipped!"
+      }
+      [ "${#tools_unequipped[@]}" -gt 0 ] && {
+         for i in ${!tools_unequipped[@]}; do printf '\e[7G%s\e[54G%10.5f\n' "$i" "${tools_unequipped[$i]}" ; done
+      }
+      [ "$(which jq)" == "" ] && printf '\e[7G\e[1;30m%s\n' "(Install 'jq' to see non-equipped tools here)"
+   fi
 }
 
 
@@ -288,48 +301,40 @@ coals_help() {
    cat <<< "GMM!
 
 Notes:
-- Cost of mining/smelting/chopping is approx $(awk -v var="$prio_smol" 'BEGIN {printf "%.2g", (var+5000)*60/10^9}') sol per hour.
-   (5000 lamport base fee plus $prio_smol lamport priority fee per transaction)
-   (smelting also burns coal and wraps ore (see below))
-- Cost of reprocessing and enhancing is $(( ($prio_big + 5000) * 2 )) lamports ($(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol) per transaction.
-- To adjust fees, edit '~/.local/bin/coals' and change ['prio_smol'|'prio_big'] variables near the top.
-- To leave some of the CPU unused while doing work, edit '~/.local/bin/coals' and change 'freecores'.
+- Transaction fees for mining/smelting/chopping are approximately $(awk -v var="$prio_smol" 'BEGIN {printf "%.2g", (var+5000)*60/10^9}') sol per hour.
+  > 5000 lamport base fee + $prio_smol lamport priority fee per tx (1 tx per minute).
+  > Smelting also burns coal and wraps ore (see below).
+- Higher fee for reprocess/enhance because rewards partially depend on precise transaction timing.
+  > 5000 lamport base fee + $prio_big lamport priority fee per tx (2 tx per operation).
+  > Enhancing also consumes chromium and additional sol (see below).
+- To adjust fees or processor usage, edit '~/.local/bin/coals' and change these variables (near the top):
+  > Priority fees (in lamports): 'prio_smol' (most functions), and 'prio_big' (reprocess/enhance).
+  > Number of CPU cores to NOT use while mining etc: 'freecores'.
+  > Note: These changes will not persist through updates. A better solution may come in future :)
 - To use a different solana keypair, edit '~/.config/solana/coals_config.yml'.
 - Mining/smelting/chopping will auto-restart on non-fatal errors.
-- Spent tool addresses will be shown in 'coals balance' if 'jq' is installed.
-- Commands not listed here (including invalid & typos) will be passed through to 'coal'.
+- Commands not listed below (including invalid & typos) will be passed through to 'coal'.
 
 Every 'coals' command:
-   coals                        # show this help message
-   coals help                   # show this help message and the 'coal' help message
-   coals mine                   # mine for coal
-   coals smelt                  # smelt for iron ingots (cost 75 coal and 0.01 ore per ingot)
-   coals chop                   # chop for wood
-   coals replant                # replant trees after chopping
-   coals reprocess              # reprocess for chromium (cost $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol)
-   coals craft                  # craft a new pickaxe (cost 3 ingot and 2 wood)
-   coals inspect                # inspect currently equipped pickaxe
-   coals unequip                # unequip currently equipped pickaxe
-   coals enhance <tool_address> # enhance specified pickaxe (cost 1 chromium and 0.01 sol)
-   coals equip <tool_address>   # equip specified pickaxe
-   coals stake                  # stake all coal in wallet
-   coals stake coal             # stake all coal in wallet
-   coals stake ingot            # stake all ingot in wallet
-   coals stake wood             # stake all wood in wallet
-   coals claim                  # claim all staked coal
-   coals claim coal             # claim all staked coal
-   coals claim ingot            # claim all staked ingot
-   coals claim wood             # claim all staked wood
-   coals balance                # show all balances (sol, coal, ingot, wood, chromium, ore)
-   coals balance all            # show all balances (sol, coal, ingot, wood, chromium, ore)
-   coals balance coal           # show coal balance
-   coals balance ingot          # show ingot balance
-   coals balance wood           # show wood balance
-   coals balance chromium       # show chromium balance
-   coals balance ore            # show ore balance
-   coals version                # show version numbers of 'coals' and 'coal'
-   coals update                 # update 'coals' to latest version
-   coals uninstall              # uninstall 'coals'
+   coals                         # show this help message
+   coals help                    # show this help message and the 'coal' help message
+   coals mine                    # mine for coal
+   coals smelt                   # smelt for iron ingots (cost 75 coal and 0.01 ore per ingot)
+   coals chop                    # chop for wood
+   coals replant                 # replant trees after chopping
+   coals reprocess               # reprocess for chromium (cost $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol)
+   coals craft                   # craft a new pickaxe (cost 3 ingot and 2 wood)
+   coals inspect                 # inspect currently equipped pickaxe
+   coals unequip                 # unequip currently equipped pickaxe
+   coals enhance <tool_address>  # enhance specified pickaxe (cost 1 chromium and $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9+0.01}') sol)
+   coals equip <tool_address>    # equip specified pickaxe
+   coals balance                 # show all balances, stakes, and tools
+   coals balance <resource>      # show balance [& stake] of <resource> (coal, ingot, wood, chromium, ore)
+   coals stake [<resource>]      # stake all coal [or <resource>: coal, ingot, wood]
+   coals claim [<resource>]      # claim all staked coal [or <resource>: coal, ingot, wood]
+   coals version                 # show version numbers of 'coals' and 'coal'
+   coals update                  # update 'coals' to latest version
+   coals uninstall               # uninstall 'coals'
 "
 }
 
