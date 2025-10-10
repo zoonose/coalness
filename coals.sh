@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.12.1"
+coals_version="0.1.12.2"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -67,7 +67,7 @@ coal_start() {
 
    # Print 'solana' config filename, wallet address, SOL balance, and 'coal' parameters
    printf '\e[1;30m'
-   printf '%s\n' "${_cfg[@]}" | grep -oP "[^/]*$" # hmm
+   printf '%s\n' "${_cfg[1]}" | grep -oP "[^/]*$" # hmm
    printf '%s\n' "$(solana address "${_cfg[@]}" || echo "address not found" ; solana balance "${_cfg[@]}" || echo "balance not found")"
    printf '%s\n' "${_params[*]}"
    printf '\e[m'
@@ -237,10 +237,10 @@ coals_balance() {
 coals_update() {
    local fetch_temp
    fetch_temp=$(mktemp)
-   echo "Downloading latest version..."
-   curl -sL "https://raw.githubusercontent.com/zoonose/coalness/main/coals.sh" -o "$fetch_temp" || { echo "Failed to download" && exit 1 ;}
+   printf '%s' "Downloading latest version..."
+   curl -sL "https://raw.githubusercontent.com/zoonose/coalness/main/coals.sh" -o "$fetch_temp" && echo "done" || { echo " Failed to download :(" && exit 1 ;}
    [ -f "$fetch_temp" ] && bash "$fetch_temp" || echo "Something went wrong"
-   [ -f "$fetch_temp" ] && rm "$fetch_temp"
+   rm -f "$fetch_temp"
 }
 
 
@@ -249,7 +249,12 @@ coals_install() {
    echo "Installing coals $coals_version"
 
    # Check for and remove previous version
-   [ -f "$HOME/.local/bin/coals" ] && coals_checkver && { printf '%s' "Removing previous version..." ; rm "$HOME/.local/bin/coals" ;} && echo "done"
+   [ -f "$HOME/.local/bin/coals" ] && coals_checkver && { 
+      printf '%s' "Removing previous version..."
+      oldcoals="$(mktemp --suffix "_old_coals.sh")"
+      trap 'rm -f "$oldcoals"' EXIT
+      mv "$HOME/.local/bin/coals" "$oldcoals"
+   } && echo "done"
 
    # Check for and create "~/.local/bin" directory
    [ ! -d "$HOME/.local/bin" ] && { printf '%s' "Creating directory $HOME/.local/bin..." ; mkdir "$HOME/.local/bin" ;} && echo "done"
@@ -263,7 +268,7 @@ coals_install() {
    [ ! -f "$coalfig" ] && { printf '%s\n%s\n%s\n%s\n%s\n' "---" "json_rpc_url: 'https://api.mainnet-beta.solana.com'" "websocket_url: ''" "keypair_path: '$HOME/.config/solana/id.json'" "commitment: 'processed'" > "$coalfig" ; echo "Created default config file at $coalfig" ;}
 
    # Check that ~/.local/bin exists and move this script there and rename to 'coals' and make it executable and report result
-   [ -d "$HOME/.local/bin" ] && mv "$0" "$HOME/.local/bin/coals" && chmod +x "$HOME/.local/bin/coals" && printf '%s\n%s\n\n' "Installed in $HOME/.local/bin" "run 'coals' to see a list of commands" || { echo "Failed to install" ; exit 1 ;}
+   [ -d "$HOME/.local/bin" ] && mv "$0" "$HOME/.local/bin/coals" && chmod +x "$HOME/.local/bin/coals" && printf '\n%s\n%s\n\n' "Installed in $HOME/.local/bin" "run 'coals' to see a list of commands" || { echo "Failed to install" ; printf '%s' "Restoring previous version..." ; mv "$oldcoals" "$HOME/.local/bin/coals" && echo done || { echo failed ; exit 1 ;} ;}
 }
 
 
