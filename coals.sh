@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.12"
+coals_version="0.1.12.1"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -270,10 +270,10 @@ coals_install() {
 coals_checkver() {
 
    # Set delimiter to '.' and make arrays of version numbers
-   local cver_exist cver_this cver_this_isnewer
-   cver_this=("$coals_version")
-   cver_exist=()
-   IFS=. read -r -a cver_exist <<< "$(grep -oPm 1 "(?<=coals_version=\")(\d+\.)+\d+(?=\")" < "$HOME/.local/bin/coals")"
+   local IFS=. cver_exist cver_this cver_this_isnewer
+   cver_this=() ; cver_exist=()
+   read -r -a cver_this <<< "$coals_version"
+   read -r -a cver_exist <<< "$(grep -oPm 1 "(?<=coals_version=\")(\d+\.)+\d+(?=\")" < "$HOME/.local/bin/coals")"
 
    # Equalise lenth of arrays
    for _ in $(seq -s. $(( ${#cver_this[@]} - ${#cver_exist[@]} ))) ; do cver_exist+=(0) ; done
