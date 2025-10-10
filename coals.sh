@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.11.6"
+coals_version="0.1.12"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -28,7 +28,7 @@ coal_start() {
       # "<your_username_here>") _cfg="--config $HOME/.config/solana/<whatever_config_file_you_want_to_use>.yml" ;;
       # "asdf"|"asdg") freecores=2 ;;&
       # "asdc") freecores=4 ;;&
-      *) _cfg="--config $HOME/.config/solana/coals_config.yml" ;; # fallback to default
+      *) _cfg=(--config "$HOME/.config/solana/coals_config.yml") ;; # fallback to default
    esac
 
    # Switch to infinite loop mode for work functions
@@ -39,41 +39,41 @@ coal_start() {
    case "$1" in
       "mine"|"smelt"|"chop")
          case "$2" in
-            "") _params="$1 --cores $(( $(nproc) - $freecores )) --buffer-time $buffer_time --priority-fee $prio_smol" ;;
+            "") _params=("$1" --cores "$(( $(nproc) - freecores ))" --buffer-time "$buffer_time" --priority-fee "$prio_smol") ;;
             "forever") { echo "'forever' is default behaviour, no need to specify it" ; exit ;} ;;
          esac ;;
-      "reprocess") _params="$1 --priority-fee $prio_big" ;;
-      "inspect"|"unequip"|"craft"|"replant") _params="$1 --priority-fee $prio_smol" ;;
+      "reprocess") _params=("$1" --priority-fee "$prio_big") ;;
+      "inspect"|"unequip"|"craft"|"replant") _params=("$1" --priority-fee "$prio_smol") ;;
       "enhance"|"equip") [ "$2" != "" ] && [ "$2" == "$(grep -oP "[1-9A-HJ-NP-Za-km-z]{32,44}" <<< "$2")" ] &&
-         { _params="$1 --tool $2 --priority-fee $( [ "$1" == "equip" ] && echo "$prio_smol" || echo "$prio_big" )" ;} ||
+         { _params=("$1" --tool "$2" --priority-fee "$( [ "$1" == "equip" ] && echo "$prio_smol" || echo "$prio_big" )") ;} ||
          { echo "Usage: 'coals $1 <tool_address>'" ; exit ;} ;;
       "stake"|"claim")
          case "$2" in
-            "") _params="$1 --priority-fee $prio_smol" ;;
-            "coal"|"ingot"|"wood") _params="$1 --resource $2 --priority-fee $prio_smol" ;;
+            "") _params=("$1" --priority-fee "$prio_smol") ;;
+            "coal"|"ingot"|"wood") _params=("$1" --resource "$2" --priority-fee "$prio_smol") ;;
             "chromium"|"ore") { echo "Nah: $2 can't be staked" ; exit ;} ;;
             *) { echo "Options: [coal], ingot, wood." ; exit ;} ;;
          esac ;;
       "balance")
          case "$2" in
             ""|"all") coals_balance ; exit ;;
-            "coal"|"ingot"|"wood"|"chromium") _params="$1 --resource $2" ;;
-            "ore") { printf 'Balance: %s ORE\n' "$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp $_cfg)" ; exit ;} ;;
+            "coal"|"ingot"|"wood"|"chromium") _params=("$1" --resource "$2") ;;
+            "ore") { printf 'Balance: %s ORE\n' "$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp "${_cfg[@]}")" ; exit ;} ;;
             *) { echo "Options: coal, ingot, wood, chromium, ore." ; exit ;} ;;
          esac ;;
       "version") coal -V ; exit ;;
-      *) _params="$*" ;;
+      *) _params=("$@") ;;
    esac
 
    # Print 'solana' config filename, wallet address, SOL balance, and 'coal' parameters
    printf '\e[1;30m'
-   printf '%s\n' "$_cfg" | grep -oP "[^/]*$" # hmm
-   printf '%s\n' "$(solana address $_cfg || echo "address not found" ; solana balance $_cfg || echo "balance not found")"
-   printf '%s\n' "$_params"
+   printf '%s\n' "${_cfg[@]}" | grep -oP "[^/]*$" # hmm
+   printf '%s\n' "$(solana address "${_cfg[@]}" || echo "address not found" ; solana balance "${_cfg[@]}" || echo "balance not found")"
+   printf '%s\n' "${_params[*]}"
    printf '\e[m'
 
    # omg it's happening omg
-   bash -c "coal $_cfg $_params"
+   bash -c "coal ${_cfg[*]} ${_params[*]}"
 
    # this should only happen if 'coal' freaks out while mining/smelting/chopping
    [[ "$0" != *"coals" ]] && echo "ERROR: Tantrum >:("
@@ -92,13 +92,13 @@ coals_loop() {
    printf "\n\n"
 
    while : ; do
-      kill $(pidof coal) $_app_pid 2>/dev/null
+      kill "$(pidof coal)" "$_app_pid" 2>/dev/null
       # Print timestamp and say GMM
       printf "\e[2A\e[2K\e[1G\e[m%(%Y-%m-%d %H:%M:%S)T\n\n"
       printf "\e[1A\e[2K\e[1G\e[1;33mGMM\e[1;37m...\e[m\n\e[2K"
 
       # Get SOL balance (retry if not found (ie no internet) - ragequit if poor)
-      sol_bal="$(solana balance --lamports $_cfg 2>&1 | awk '{print $1}')"
+      sol_bal="$(solana balance --lamports "${_cfg[@]}" 2>&1 | awk '{print $1}')"
       [[ "$sol_bal" == "Error"* ]] && { printf '%s\n' "Balance not found, retrying..." ; sleep 10 ; continue ;}
       [ "$sol_bal" -lt 10000000 ] && { printf '\n\e[1;31m%s\e[m%s\n\n' "ERROR: " "Not enough SOL :(" ; break ;}
 
@@ -130,7 +130,7 @@ coals_loop() {
 
 
 coals_balance() {
-   declare -A coals_bals coals_stakes tools_unequipped
+   declare -A coals_bals coals_stakes tool_equipped tools_unequipped
    balance_order=(sol coal ingot wood chromium ore)
    stake_order=(coal ingot wood)
    results=$(mktemp) ; trap 'kill "${pids[@]}" "$timeoutpid" 2>/dev/null ; rm -f $results' EXIT
@@ -138,9 +138,9 @@ coals_balance() {
    make_fetch_happen() {
       local resource="$1" output type
       case $resource in
-         sol) output="$(solana balance $_cfg 2>&1)" ;;
-         ore) output="$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp $_cfg 2>/dev/null)" ;;
-         *) output="$(coal balance --resource "$resource" $_cfg 2>/dev/null)" ;;
+         sol) output="$(solana balance "${_cfg[@]}" 2>&1)" ;;
+         ore) output="$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp "${_cfg[@]}" 2>/dev/null)" ;;
+         *) output="$(coal balance --resource "$resource" "${_cfg[@]}" 2>/dev/null)" ;;
       esac
       while read -r line; do
          [[ "$line" == *"Error"* ]] && sleep 11
@@ -151,48 +151,56 @@ coals_balance() {
    }
 
    tool_time_equipped() {
-      local output="$(coal inspect $_cfg 2>/dev/null)"
-      if [ "$output" != "" ] ; then
-         printf 'tool,equipped,%s\n' "$(grep -oP "(?<=Inspected:\s)([1-9A-HJ-NP-Za-km-z]{32,44})" <<< "$output")"
-         printf 'tool,equipped,%s\n' "Durability: $(grep -oP "(?<=Durability:\s)(\d+(\.\d+)?)" <<< "$output")"
-      # else
-         # printf 'tool,equipped,%s\n' "None"
-      fi
+      output="$(coal inspect "${_cfg[@]}" 2>/dev/null)"
+      [ "$output" != "" ] && grep -zoP "(?<=Inspected:\s)([1-9A-HJ-NP-Za-km-z]{32,44})|(?<=Durability:\s)(\d+(\.\d+)?)" <<< "$output" | awk 'BEGIN{RS="\0"} {a[NR]=$0} END{printf "%s,equipped,%s\n", a[1], a[2]}'
    }
 
    tool_time_unequipped() {
-      # not the finest of chonks ... lol ... but for now, it works so whatevaa
-      local -A tools_blahblah
-      local rpc_output jq_output jq_output_cull tool_address tool_durability 
-      local sol_address="$(solana address $_cfg 2>/dev/null)"
-      rpc_output="$(curl -s -X POST -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"searchAssets\",\"params\":{\"interface\":\"MplCoreAsset\",\"ownerAddress\":\"$sol_address\"}}" "https://api.mainnet-beta.solana.com")"
-      jq_output_cull="$(jq -r '.result.items[]? | select(.burnt == false)? | select(.content.files[])? | .id' <<< "$rpc_output")"
+      local -A tools_blah
+      local sol_addr fk_outa_hea rpc_output jq_output tool_addr tool_durb
+      sol_addr="$(solana address "${_cfg[@]}" 2>/dev/null)"
+      fk_outa_hea="$(mktemp)"
+      trap 'kill "${cull_pids[@]}" 2>/dev/null ; rm -f "$fk_outa_hea"' EXIT
+
+      # sub function to check which 'MplCoreAsset's are not actually NFTs
+      tool_cull() { [ "${tools_blah[$1]}" == "1000" ] && [ "$(solana account "$1" | grep "Length:" | awk '{print $2}')" == 1 ] && echo "$1" ;}
+
+      # get all MplCoreAssets in wallet
+      rpc_output="$(curl -s -X POST -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"searchAssets\",\"params\":{\"interface\":\"MplCoreAsset\",\"ownerAddress\":\"$sol_addr\"}}" "https://api.mainnet-beta.solana.com")"
+
+      # get address and durability for items which are unburnt and have durability attribute
       jq_output="$(jq -r '.result.items[]? | select(.burnt == false)? | select(.plugins.attributes.data.attribute_list[]? | select(.key == "durability")? | select(.value)?)? | "\(.id),\((.plugins.attributes.data.attribute_list[] | select(.key == "durability") |.value))"' <<< "$rpc_output")"
-      [ "$jq_output" != "" ] && while IFS=, read tool_address tool_durability; do tools_blahblah["$tool_address"]="$tool_durability" ; done <<< "$jq_output"
-      while read line; do unset tools_blahblah[$line] ; done <<< "$jq_output_cull"
-      for i in ${!tools_blahblah[@]}; do printf '%s,unequipped,%s\n' "$i" "${tools_blahblah[$i]}" ; done
+
+      # read info into array
+      [ "$jq_output" != "" ] && while IFS=, read -r tool_addr tool_durb; do tools_blah["$tool_addr"]="$tool_durb" ; done <<< "$jq_output"
+
+      # call cull function in parallel for super fast ultra speedyness
+      for i in "${!tools_blah[@]}"; do tool_cull "$i" >> "$fk_outa_hea" & cull_pids+=($!) ; done
+
+      # wait for cull functions to finish
+      for pid in "${cull_pids[@]}"; do wait "$pid" 2>/dev/null ; done
+
+      # remove non-tools from array
+      while read -r line; do unset "tools_blah[$line]" ; done < "$fk_outa_hea"
+
+      # print results
+      for i in "${!tools_blah[@]}" ; do printf '%s,unequipped,%s\n' "$i" "${tools_blah[$i]}" ; done
    }
 
+   # mystery function what it does who can tell. you thought maybe the comment would give you a clue but no.
    printf '%s' "Fetching..."
 
    # get balances
-   for i in "${balance_order[@]}" ; do
-      make_fetch_happen "$i" >> "$results" &
-      pids+=($!)
-   done
+   for i in "${balance_order[@]}" ; do make_fetch_happen "$i" >> "$results" & pids+=($!) ; done
 
    # get equipped tool info
-   tool_time_equipped "$i" >> "$results" &
-   pids+=($!)
+   tool_time_equipped "$i" >> "$results" & pids+=($!)
 
    # get spent tool addresses if 'jq' is installed
-   [ "$(which jq)" != "" ] && {
-      tool_time_unequipped "$i" >> "$results" &
-      pids+=($!)
-   }
+   [ "$(which jq)" != "" ] && { tool_time_unequipped "$i" >> "$results" & pids+=($!) ;}
 
    # timeout countdown
-   (for t in {0..7} ; do sleep 1 ; printf '.' ; done ; kill "${pids[@]}" 2>/dev/null) & timeoutpid="$!"
+   (for _ in {0..7} ; do sleep 1 ; printf '.' ; done ; kill "${pids[@]}" 2>/dev/null) & timeoutpid="$!"
 
    # wait for fetch
    for pid in "${pids[@]}"; do wait "$pid" 2>/dev/null ; done
@@ -203,10 +211,10 @@ coals_balance() {
    # put results in arrays
    while IFS=',' read -r resource type value; do
       case $type in
-         "balance") coals_bals[$resource]=$value ;;
-         "stake") coals_stakes[$resource]=$value ;;
-         "equipped") tool_equipped+=("$value") ;;
-         "unequipped") tools_unequipped[$resource]="$value" ;;
+         "balance") coals_bals["$resource"]="$value" ;;
+         "stake") coals_stakes["$resource"]="$value" ;;
+         "equipped") tool_equipped["$resource"]="$value" ;;
+         "unequipped") tools_unequipped["$resource"]="$value" ;;
       esac
    done < "$results"
 
@@ -216,15 +224,11 @@ coals_balance() {
    printf '\e[1;37m%s\e[m\n' "Stake:" ; for S in "${stake_order[@]}" ; do printf '%12.4f %s\n' "${coals_stakes[$S]}" "${S^^}" ; done
    printf '\e[1;37m%s\e[m\n' "Tools:" ;
    if [ "$(( "${#tool_equipped[@]}" + "${#tools_unequipped[@]}" ))" -eq 0 ] ; then
-      printf '\t%s\n' "None"
+      printf '\e[7G%s\n' "None"
    else
       printf '\e[1;30m\e[7G%s\e[54G%s\e[m\n' "Address" "Durability"
-      [ "${#tool_equipped[@]}" -gt 0 ] && {
-         printf '\e[4G\e[1;30m%s\e[m\e[7G%s\e[54G%10.5f\e[66G\e[1;30m%s\e[m\n' "*" "${tool_equipped[0]}" "$(grep -oP "\d+(\.\d+)?" <<< "${tool_equipped[1]}")" "<- Equipped!"
-      }
-      [ "${#tools_unequipped[@]}" -gt 0 ] && {
-         for i in ${!tools_unequipped[@]}; do printf '\e[7G%s\e[54G%10.5f\n' "$i" "${tools_unequipped[$i]}" ; done
-      }
+      [ "${#tool_equipped[@]}" -gt 0 ] && printf '\e[4G\e[1;30m%s\e[m\e[7G%s\e[54G%10.5f\e[66G\e[1;30m%s\e[m\n' "*" "${!tool_equipped[*]}" "$(grep -oP "\d+(\.\d+)?" <<< "${tool_equipped[*]}")" "<- Equipped!"
+      [ "${#tools_unequipped[@]}" -gt 0 ] && for i in "${!tools_unequipped[@]}"; do printf '\e[7G%s\e[54G%10.5f\n' "$i" "${tools_unequipped[$i]}" ; done
       [ "$(which jq)" == "" ] && printf '\e[7G\e[1;30m%s\n' "(Install 'jq' to see non-equipped tools here)"
    fi
 }
@@ -242,7 +246,7 @@ coals_update() {
 
 coals_install() {
 
-   echo "Installing coals $coals_version" ; echo
+   echo "Installing coals $coals_version"
 
    # Check for and remove previous version
    [ -f "$HOME/.local/bin/coals" ] && coals_checkver && { printf '%s' "Removing previous version..." ; rm "$HOME/.local/bin/coals" ;} && echo "done"
@@ -266,13 +270,14 @@ coals_install() {
 coals_checkver() {
 
    # Set delimiter to '.' and make arrays of version numbers
-   local IFS=. cver_exist cver_this cver_this_isnewer
-   cver_this=($coals_version)
-   cver_exist=($(grep -oPm 1 "(?<=coals_version=\")(\d+\.)+\d+(?=\")" < "$HOME/.local/bin/coals"))
+   local cver_exist cver_this cver_this_isnewer
+   cver_this=("$coals_version")
+   cver_exist=()
+   IFS=. read -r -a cver_exist <<< "$(grep -oPm 1 "(?<=coals_version=\")(\d+\.)+\d+(?=\")" < "$HOME/.local/bin/coals")"
 
    # Equalise lenth of arrays
-   for g in $(seq -s. $(( ${#cver_this[@]} - ${#cver_exist[@]} ))) ; do cver_exist+=(0) ; done
-   for h in $(seq -s. $(( ${#cver_exist[@]} - ${#cver_this[@]} ))) ; do cver_this+=(0) ; done
+   for _ in $(seq -s. $(( ${#cver_this[@]} - ${#cver_exist[@]} ))) ; do cver_exist+=(0) ; done
+   for _ in $(seq -s. $(( ${#cver_exist[@]} - ${#cver_this[@]} ))) ; do cver_this+=(0) ; done
 
    # Compare versions
    for i in "${!cver_exist[@]}"; do
