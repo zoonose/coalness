@@ -239,7 +239,7 @@ coals_update() {
    fetch_temp=$(mktemp)
    echo "Downloading latest version..."
    curl -sL "https://raw.githubusercontent.com/zoonose/coalness/main/coals.sh" -o "$fetch_temp" || { echo "Failed to download" && exit 1 ;}
-   [ -f "$fetch_temp" ] && bash "$fetch_temp" || { echo "Something went wrong" ; exit 1 ;}
+   [ -f "$fetch_temp" ] && bash "$fetch_temp" || echo "Something went wrong"
    [ -f "$fetch_temp" ] && rm "$fetch_temp"
 }
 
