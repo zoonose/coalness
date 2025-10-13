@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.12.2"
+coals_version="0.1.12.3"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -94,8 +94,8 @@ coals_loop() {
    while : ; do
       kill "$(pidof coal)" "$_app_pid" 2>/dev/null
       # Print timestamp and say GMM
-      printf "\e[2A\e[2K\e[1G\e[m%(%Y-%m-%d %H:%M:%S)T\n\n"
-      printf "\e[1A\e[2K\e[1G\e[1;33mGMM\e[1;37m...\e[m\n\e[2K"
+      printf "\e[3A\e[2K\e[1G\e[m%(%Y-%m-%d %H:%M:%S %Z)T\n\n\n"
+      printf "\e[1A\e[2K\e[1G\e[1;33mGMM\e[1;37m...\e[m\n\e[2K\n"
 
       # Get SOL balance (retry if not found (ie no internet) - ragequit if poor)
       sol_bal="$(solana balance --lamports "${_cfg[@]}" 2>&1 | awk '{print $1}')"
@@ -219,7 +219,6 @@ coals_balance() {
    done < "$results"
 
    # print it
-   printf '\e[2K\r'
    printf '\e[1;37m%s\e[m\n' "Balance:" ; for B in "${balance_order[@]}" ; do printf '%12.4f %s\n' "${coals_bals[$B]}" "${B^^}" ; done
    printf '\e[1;37m%s\e[m\n' "Stake:" ; for S in "${stake_order[@]}" ; do printf '%12.4f %s\n' "${coals_stakes[$S]}" "${S^^}" ; done
    printf '\e[1;37m%s\e[m\n' "Tools:" ;
@@ -308,8 +307,8 @@ coals_uninstall() {
 
 
 coals_help() {
-   cat <<< "GMM!
-
+   printf '\n\e[1;33m%s\e[m%s\n' "GMM" "!"
+   cat <<< "
 Notes:
 - Transaction fees for mining/smelting/chopping are approximately $(awk -v var="$prio_smol" 'BEGIN {printf "%.2g", (var+5000)*60/10^9}') sol per hour.
   > 5000 lamport base fee + $prio_smol lamport priority fee per tx (1 tx per minute).
@@ -353,5 +352,5 @@ Every 'coals' command:
 [ -f "$0" ] || { echo "Not like this" ; exit 1 ;}
 [[ "$0" != "$HOME/.local/bin/coals" ]] && { coals_install ; exit ;}
 
-echo "coals $coals_version"
+printf '%s\n%(%Y-%m-%d %H:%M:%S %Z)T\n' "coals $coals_version"
 coal_start "$@"
