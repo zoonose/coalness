@@ -219,6 +219,7 @@ coals_balance() {
    done < "$results"
 
    # print it
+   printf '\e[2K\r'
    printf '\e[1;37m%s\e[m\n' "Balance:" ; for B in "${balance_order[@]}" ; do printf '%12.4f %s\n' "${coals_bals[$B]}" "${B^^}" ; done
    printf '\e[1;37m%s\e[m\n' "Stake:" ; for S in "${stake_order[@]}" ; do printf '%12.4f %s\n' "${coals_stakes[$S]}" "${S^^}" ; done
    printf '\e[1;37m%s\e[m\n' "Tools:" ;
