@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.12.3"
+coals_version="0.1.13"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -130,9 +130,10 @@ coals_loop() {
 
 
 coals_balance() {
-   declare -A coals_bals coals_stakes tool_equipped tools_unequipped
+   declare -A coals_bals coals_stakes
    balance_order=(sol coal ingot wood chromium ore)
    stake_order=(coal ingot wood)
+   coals_tools=()
    results=$(mktemp) ; trap 'kill "${pids[@]}" "$timeoutpid" 2>/dev/null ; rm -f $results' EXIT
 
    make_fetch_happen() {
@@ -146,36 +147,36 @@ coals_balance() {
          [[ "$line" == *"Error"* ]] && sleep 11
          [[ "$line" == "Stake"* ]] && type="stake" || type="balance"
          value="$(grep -ioP "\d+(\.\d+)?" <<< "$line")"
-         echo "${resource},${type},${value}"
+         echo "${type},${resource},${value}"
       done <<< "$output"
    }
 
    tool_time_equipped() {
       output="$(coal inspect "${_cfg[@]}" 2>/dev/null)"
-      [ "$output" != "" ] && grep -zoP "(?<=Inspected:\s)([1-9A-HJ-NP-Za-km-z]{32,44})|(?<=Durability:\s)(\d+(\.\d+)?)" <<< "$output" | awk 'BEGIN{RS="\0"} {a[NR]=$0} END{printf "%s,equipped,%s\n", a[1], a[2]}'
+      [ "$output" != "" ] && grep -zoP "(?<=Inspected:\s)([1-9A-HJ-NP-Za-km-z]{32,44})|(?<=Durability:\s)(\d+(\.\d+)?)|(?<=Multiplier:\s)(\d+(\.\d+)?)" <<< "$output" | awk 'BEGIN{RS="\0"} {a[NR]=$0} END{printf "tool,,*#%s#%s#%s#%s\n", a[1], a[3] * 100, a[2], "<- Equipped!"}'
    }
 
    tool_time_unequipped() {
       local -A tools_blah
-      local sol_addr fk_outa_hea rpc_output jq_output tool_addr tool_durb
+      local sol_addr fk_outa_hea rpc_output jq_output tool_addr tool_mult tool_durb
       sol_addr="$(solana address "${_cfg[@]}" 2>/dev/null)"
       fk_outa_hea="$(mktemp)"
       trap 'kill "${cull_pids[@]}" 2>/dev/null ; rm -f "$fk_outa_hea"' EXIT
 
       # sub function to check which 'MplCoreAsset's are not actually NFTs
-      tool_cull() { [ "${tools_blah[$1]}" == "1000" ] && [ "$(solana account "$1" | grep "Length:" | awk '{print $2}')" == 1 ] && echo "$1" ;}
+      tool_cull() { [ "$(solana account "$1" | grep "Length:" | awk '{print $2}')" == 1 ] && echo "$1" ;}
 
       # get all MplCoreAssets in wallet
       rpc_output="$(curl -s -X POST -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"searchAssets\",\"params\":{\"interface\":\"MplCoreAsset\",\"ownerAddress\":\"$sol_addr\"}}" "https://api.mainnet-beta.solana.com")"
 
       # get address and durability for items which are unburnt and have durability attribute
-      jq_output="$(jq -r '.result.items[]? | select(.burnt == false)? | select(.plugins.attributes.data.attribute_list[]? | select(.key == "durability")? | select(.value)?)? | "\(.id),\((.plugins.attributes.data.attribute_list[] | select(.key == "durability") |.value))"' <<< "$rpc_output")"
+      jq_output="$(jq -r '.result.items[]? | select(.burnt == false)? | select(.plugins.attributes.data.attribute_list[]? | select(.key == "multiplier")? | select(.value)?)? | select(.plugins.attributes.data.attribute_list[]? | select(.key == "durability")? | select(.value)?)? | "\(.id),\((.plugins.attributes.data.attribute_list[] | select(.key == "multiplier") | .value)),\((.plugins.attributes.data.attribute_list[] | select(.key == "durability") |.value))"' <<<"$rpc_output")"
 
       # read info into array
-      [ "$jq_output" != "" ] && while IFS=, read -r tool_addr tool_durb; do tools_blah["$tool_addr"]="$tool_durb" ; done <<< "$jq_output"
+      [ "$jq_output" != "" ] && while IFS=, read -r tool_addr tool_mult tool_durb; do tools_blah["$tool_addr"]="$tool_mult#$tool_durb" ; done <<< "$jq_output"
 
       # call cull function in parallel for super fast ultra speedyness
-      for i in "${!tools_blah[@]}"; do tool_cull "$i" >> "$fk_outa_hea" & cull_pids+=($!) ; done
+      for i in "${!tools_blah[@]}"; do [ "$(grep -oP "#1000$" <<< "${tools_blah[$i]}")" != "" ] && tool_cull "$i" >> "$fk_outa_hea" & cull_pids+=($!) ; done
 
       # wait for cull functions to finish
       for pid in "${cull_pids[@]}"; do wait "$pid" 2>/dev/null ; done
@@ -184,7 +185,7 @@ coals_balance() {
       while read -r line; do unset "tools_blah[$line]" ; done < "$fk_outa_hea"
 
       # print results
-      for i in "${!tools_blah[@]}" ; do printf '%s,unequipped,%s\n' "$i" "${tools_blah[$i]}" ; done
+      for i in "${!tools_blah[@]}" ; do printf 'tool,,#%s#%s\n' "$i" "${tools_blah[$i]}" ; done
    }
 
    # mystery function what it does who can tell. you thought maybe the comment would give you a clue but no.
@@ -209,12 +210,11 @@ coals_balance() {
    kill -0 "$timeoutpid" 2>/dev/null || { printf '\e[2K\r%s\n' "Error fetching balances :(" ; exit ;} ; kill "$timeoutpid"
 
    # put results in arrays
-   while IFS=',' read -r resource type value; do
+   while IFS=',' read -r type resource value; do
       case $type in
          "balance") coals_bals["$resource"]="$value" ;;
          "stake") coals_stakes["$resource"]="$value" ;;
-         "equipped") tool_equipped["$resource"]="$value" ;;
-         "unequipped") tools_unequipped["$resource"]="$value" ;;
+         "tool") coals_tools+=("$value") ;;
       esac
    done < "$results"
 
@@ -223,12 +223,11 @@ coals_balance() {
    printf '\e[1;37m%s\e[m\n' "Balance:" ; for B in "${balance_order[@]}" ; do printf '%12.4f %s\n' "${coals_bals[$B]}" "${B^^}" ; done
    printf '\e[1;37m%s\e[m\n' "Stake:" ; for S in "${stake_order[@]}" ; do printf '%12.4f %s\n' "${coals_stakes[$S]}" "${S^^}" ; done
    printf '\e[1;37m%s\e[m\n' "Tools:" ;
-   if [ "$(( "${#tool_equipped[@]}" + "${#tools_unequipped[@]}" ))" -eq 0 ] ; then
+   if [ "${#coals_tools[@]}" -eq 0 ] ; then
       printf '\e[7G%s\n' "None"
    else
-      printf '\e[1;30m\e[7G%s\e[54G%s\e[m\n' "Address" "Durability"
-      [ "${#tool_equipped[@]}" -gt 0 ] && printf '\e[4G\e[1;30m%s\e[m\e[7G%s\e[54G%10.5f\e[66G\e[1;30m%s\e[m\n' "*" "${!tool_equipped[*]}" "$(grep -oP "\d+(\.\d+)?" <<< "${tool_equipped[*]}")" "<- Equipped!"
-      [ "${#tools_unequipped[@]}" -gt 0 ] && for i in "${!tools_unequipped[@]}"; do printf '\e[7G%s\e[54G%10.5f\n' "$i" "${tools_unequipped[$i]}" ; done
+      printf '\e[1;30m\e[7G%s\e[54G%s\e[62G%s\e[m\n' "Address" "Mult." "Durability"
+      for i in ${!coals_tools[@]} ; do awk 'BEGIN{FS="#"} {printf "\33[4G\33[1;30m%s\33[m\33[7G%s\33[54G%4.2fx\33[62G%10.5f\33[74G\33[1;30m%s\33[m\n",$1,$2,$3/100,$4,$5}' <<< "${coals_tools[$i]}" ; done
       [ "$(which jq)" == "" ] && printf '\e[7G\e[1;30m%s\n' "(Install 'jq' to see non-equipped tools here)"
    fi
 }
