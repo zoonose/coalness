@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.13"
+coals_version="0.1.13.37"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -43,7 +43,14 @@ coal_start() {
             "forever") { echo "'forever' is default behaviour, no need to specify it" ; exit ;} ;;
          esac ;;
       "reprocess") _params=("$1" --priority-fee "$prio_big") ;;
-      "inspect"|"unequip"|"craft"|"replant") _params=("$1" --priority-fee "$prio_smol") ;;
+      "inspect")
+         case "$2" in
+            "") _params=("$1" --priority-fee "$prio_smol") ;;
+            *) [ "$2" != "" ] && [ "$2" == "$(grep -oP "[1-9A-HJ-NP-Za-km-z]{32,44}" <<< "$2")" ] &&
+               { inspect_external "$2" ; exit ;} ||
+               { echo "Usage: 'coals $1 [<tool_address>]'" ; exit ;} ;;
+         esac ;;
+      "unequip"|"craft"|"replant") _params=("$1" --priority-fee "$prio_smol") ;;
       "enhance"|"equip") [ "$2" != "" ] && [ "$2" == "$(grep -oP "[1-9A-HJ-NP-Za-km-z]{32,44}" <<< "$2")" ] &&
          { _params=("$1" --tool "$2" --priority-fee "$( [ "$1" == "equip" ] && echo "$prio_smol" || echo "$prio_big" )") ;} ||
          { echo "Usage: 'coals $1 <tool_address>'" ; exit ;} ;;
@@ -89,18 +96,19 @@ coals_loop() {
    # Terminal command to monitor with 'script'
    _app="coal_start $looptask"
    _log="$(mktemp --suffix ".coals.log")"
-   printf "\n\n"
+   printf '\n'
 
    while : ; do
       kill "$(pidof coal)" "$_app_pid" 2>/dev/null
+
       # Print timestamp and say GMM
-      printf "\e[3A\e[2K\e[1G\e[m%(%Y-%m-%d %H:%M:%S %Z)T\n\n\n"
-      printf "\e[1A\e[2K\e[1G\e[1;33mGMM\e[1;37m...\e[m\n\e[2K\n"
+      printf "\e[1A\e[1G\e[m%(%Y-%m-%d %H:%M:%S %Z)T\n\n"
+      printf "\e[1G\e[1;33mGMM\e[1;37m...\e[m\n\n"
 
       # Get SOL balance (retry if not found (ie no internet) - ragequit if poor)
       sol_bal="$(solana balance --lamports "${_cfg[@]}" 2>&1 | awk '{print $1}')"
-      [[ "$sol_bal" == "Error"* ]] && { printf '%s\n' "Balance not found, retrying..." ; sleep 10 ; continue ;}
-      [ "$sol_bal" -lt 10000000 ] && { printf '\n\e[1;31m%s\e[m%s\n\n' "ERROR: " "Not enough SOL :(" ; break ;}
+      [[ "$sol_bal" == "Error"* ]] && { printf '\e[2A\e[2K%s' "Balance not found, retrying..." ; sleep 11 ; printf '\e[2K' ; continue ;}
+      [ "$sol_bal" -lt 10000000 ] && { printf '\e[1;31m%s\e[m%s\n\n' "ERROR: " "Not enough SOL :(" ; break ;}
 
       # Flush log
       : > "$_log"
@@ -111,19 +119,19 @@ coals_loop() {
 
       # Kill if death or when log file becomes chonkish or if thing-happening stops
       tail -F -n +2 "$_log" | while read -r -t 40 -n 15970 line; do
-         [ "$(wc -c < "$_log")" -gt 6942069 ] && [[ "$(tail -n 1 "$_log")" == *"OK"* ]] && kill HUP "$_app_pid" 2>/dev/null && { echo ; sleep 3 ; printf '\n\e[1;36m%s\e[m\n\n\n\n' "Flushing temp file" ; break ;}
-         [ "$(grep -oi "error" <<< "$line")" != "" ] && { echo ; for i in {1..5} ; do printf '\U274c ' ; done ; echo ; kill $_app_pid 2>/dev/null ; break ;}
+         [ "$(wc -c < "$_log")" -gt 6942069 ] && [[ "$(tail -n 1 "$_log")" == *"OK"* ]] && kill HUP "$_app_pid" 2>/dev/null && { echo ; sleep 3 ; printf '\n\e[1;36m%s\e[m\n\n' "Flushing temp file" ; break ;}
+         [ "$(grep -oi "error" <<< "$line")" != "" ] && { printf '\n%b\n\n' "\U274c \U274c \U274c \U274c \U274c" ; kill $_app_pid 2>/dev/null ; break ;}
       done
 
       # Catch (probable) smelter failure and break the loop
-      [ "$looptask" == "smelt" ] && [ "$(tail "$_log" | grep -P '(error: 0x1)|(foreman)')" != "" ] && { printf '\n%s\n' "RUH ROH Probably not enough coal/ore for the smelter!" ; break ;}
+      [ "$looptask" == "smelt" ] && [ "$(tail "$_log" | grep -P '(error: 0x1)|(foreman)')" != "" ] && { printf '\n%s\n\n' "RUH ROH Probably not enough coal/ore for the smelter!" ; break ;}
 
       # Catch ecocide and break the loop
       [ "$looptask" == "chop" ] && [ "$(tail "$_log" | grep -P '(Needs reset)')" != "" ] && { printf '\n%s\e[48;5;130m\e[38;5;226m%s\e[38;5;21m%s\e[38;5;220m%s\e[m\n%s\n\n' "RUH ROH All the trees have been chopped! Lorax is judging you  " ">" ":" "{ " "Remember to replant so the forest can grow back!" ; break ;}
 
       # Hold horses
       sleep 3
-      for (( D=7 ; D>0 ; D-- )) ; do printf '\e[m\e[1G%s\e[1;33m%d\e[m' "Restarting in " "$D" ; sleep 1 ; done
+      for (( D=7 ; D>0 ; D-- )) ; do printf '\e[m\e[1G%s\e[1;33m%d\e[m' "Restarting in " "$D" ; sleep 1 ; done ; echo
    done
    exit
 }
@@ -189,7 +197,7 @@ coals_balance() {
    }
 
    # mystery function what it does who can tell. you thought maybe the comment would give you a clue but no.
-   printf '%s' "Fetching..."
+   printf '\n%s' "Fetching..."
 
    # get balances
    for i in "${balance_order[@]}" ; do make_fetch_happen "$i" >> "$results" & pids+=($!) ; done
@@ -230,6 +238,43 @@ coals_balance() {
       for i in ${!coals_tools[@]} ; do awk 'BEGIN{FS="#"} {printf "\33[4G\33[1;30m%s\33[m\33[7G%s\33[54G%4.2fx\33[62G%10.5f\33[74G\33[1;30m%s\33[m\n",$1,$2,$3/100,$4,$5}' <<< "${coals_tools[$i]}" ; done
       [ "$(which jq)" == "" ] && printf '\e[7G\e[1;30m%s\n' "(Install 'jq' to see non-equipped tools here)"
    fi
+   printf '\n'
+}
+
+
+inspect_external() {
+   local -A inspectoor
+   local rpc_output jq_output
+   local equipped_as_bro="nah"
+
+   [ "$(which jq)" == "" ] && { echo "Error: To use this feature, 'jq' must be installed." ; exit ;}
+
+   rpc_output="$(curl -sX POST -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getAsset\",\"params\":{\"id\":\"$1\"}}" https://api.mainnet-beta.solana.com)"
+
+   jq_output="$(jq -r ' .result? | select(.burnt == false)? | select( .grouping[]?|select(.group_key)|select(.group_value=="CuaLHUJA1dyQ6AYcTcMZrCoBqssSJbqkY7VfEEFdxzCk")? )? | select( .ownership.owner )? | select( .content.metadata.name )? | select( .plugins.attributes.data.attribute_list[]?|select(.key == "multiplier")?|select(.value)? )? | select( .plugins.attributes.data.attribute_list[]?|select(.key == "durability")?|select(.value)?)? | "Address=\(.id)", "Type=\(.content.metadata.name)", "Owner=\(.ownership.owner)", "Multiplier=\((.plugins.attributes.data.attribute_list[]|select(.key=="multiplier")|.value))", "Durability=\((.plugins.attributes.data.attribute_list[]|select(.key=="durability")|.value))" ' <<< "$rpc_output")"
+
+   [ "$jq_output" == "" ] && { printf '\n%s\n\n' "Hmm: That does not seem to be a minechain tool!" ; exit ;}
+
+   while IFS="=" read -r key value; do
+      inspectoor["$key"]="$value"
+   done <<< "$jq_output"
+
+   # if the owner of the owner address is not the system program, the tool must be equipped-as, bro.
+   [ "$(solana account "${inspectoor[Owner]}" | grep -oP "(?<=Owner: )1{32}")" == "" ] && equipped_as_bro="yeah"
+
+   # if the durability value returned by the asset lookup is 1000, it might be brand-new, or it might not be an actual tool NFT
+   [ "${inspectoor[Durability]}" == "1000" ] && [ "$(solana account "${inspectoor[Address]}" | grep "Length:" | awk '{print $2}')" == 1 ] && { printf '\n%s\n\n' "Hmm: If you're reading this, you may be a 1337 h4x0r and/or a curious cat, but that is not a valid tool, sorry. *womp womp*)" ; exit ;}
+
+   # format the multiplier for printin'
+   inspectoor[Multiplier]="$(awk -v var="${inspectoor[Multiplier]}" 'BEGIN {printf "%4.2fx", var/100}')"
+
+   # printy mcprintface
+   printf '\n\e[1;37m%s\e[m' "Tool info:"
+   for i in Type Multiplier Durability Address Owner ; do printf '\n\e[4G\e[1;30m%10s:\e[m\e[16G%s' "$i" "${inspectoor[$i]}" ; done
+
+   # if the tool is currently equipped, warn that the "owner" is not the actual owner
+   [ "$equipped_as_bro" == "yeah" ] && printf '\e[1;33m%s\n\e[16G\e[1;30m%s\n\e[16G%s\n\e[16G%s\e[m' " *" "Note: This \"owner\" is a Program Derived Address!" "> That means the tool is currently down in the mines!" "> To find the true owner, look up the PDA on Solscan and check \"Funded by\"."
+   printf '\n\n'
 }
 
 
@@ -325,25 +370,25 @@ Notes:
 - Commands not listed below (including invalid & typos) will be passed through to 'coal'.
 
 Every 'coals' command:
-   coals                         # show this help message
-   coals help                    # show this help message and the 'coal' help message
-   coals mine                    # mine for coal
-   coals smelt                   # smelt for iron ingots (cost 75 coal and 0.01 ore per ingot)
-   coals chop                    # chop for wood
-   coals replant                 # replant trees after chopping
-   coals reprocess               # reprocess for chromium (cost $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol)
-   coals craft                   # craft a new pickaxe (cost 3 ingot and 2 wood)
-   coals inspect                 # inspect currently equipped pickaxe
-   coals unequip                 # unequip currently equipped pickaxe
-   coals enhance <tool_address>  # enhance specified pickaxe (cost 1 chromium and $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9+0.01}') sol)
-   coals equip <tool_address>    # equip specified pickaxe
-   coals balance                 # show all balances, stakes, and tools
-   coals balance <resource>      # show balance [& stake] of <resource> (coal, ingot, wood, chromium, ore)
-   coals stake [<resource>]      # stake all coal [or <resource>: coal, ingot, wood]
-   coals claim [<resource>]      # claim all staked coal [or <resource>: coal, ingot, wood]
-   coals version                 # show version numbers of 'coals' and 'coal'
-   coals update                  # update 'coals' to latest version
-   coals uninstall               # uninstall 'coals'
+   coals                           # show this help message
+   coals help                      # show this help message and the 'coal' help message
+   coals mine                      # mine for coal
+   coals smelt                     # smelt for iron ingots (cost 75 coal and 0.01 ore per ingot)
+   coals chop                      # chop for wood
+   coals replant                   # replant trees after chopping
+   coals reprocess                 # reprocess for chromium (cost $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol)
+   coals craft                     # craft a new pickaxe (cost 3 ingot and 2 wood)
+   coals inspect [<tool_address>]  # inspect currently equipped tool [or <tool_address>]
+   coals unequip                   # unequip currently equipped tool
+   coals enhance <tool_address>    # enhance specified pickaxe (cost 1 chromium and $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9+0.01}') sol)
+   coals equip <tool_address>      # equip specified pickaxe
+   coals balance                   # show all balances, stakes, and tools
+   coals balance <resource>        # show balance [& stake] of <resource> (coal, ingot, wood, chromium, ore)
+   coals stake [<resource>]        # stake all coal [or <resource>: coal, ingot, wood]
+   coals claim [<resource>]        # claim all staked coal [or <resource>: coal, ingot, wood]
+   coals version                   # show version numbers of 'coals' and 'coal'
+   coals update                    # update 'coals' to latest version
+   coals uninstall                 # uninstall 'coals'
 "
 }
 
@@ -352,5 +397,6 @@ Every 'coals' command:
 [ -f "$0" ] || { echo "Not like this" ; exit 1 ;}
 [[ "$0" != "$HOME/.local/bin/coals" ]] && { coals_install ; exit ;}
 
-printf '%s\n%(%Y-%m-%d %H:%M:%S %Z)T\n' "coals $coals_version"
+printf '%s\n' "coals $coals_version"
+case "$1" in balance) printf '%(%Y-%m-%d %H:%M:%S %Z)T\n' ;; esac
 coal_start "$@"
