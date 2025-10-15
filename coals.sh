@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.13.37.420"
+coals_version="0.1.13.37.420.69"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -50,7 +50,13 @@ coal_start() {
                { inspect_external "$2" ; exit ;} ||
                { echo "Usage: 'coals $1 [<tool_address>]'" ; exit ;} ;;
          esac ;;
-      "unequip"|"craft"|"replant") _params=("$1" --priority-fee "$prio_smol") ;;
+      "craft")
+         case "$2" in
+            "") _params=("$1" --priority-fee "$prio_smol") ;;
+            "coal"|"wood") _params=("$1" --resource "$2" --priority-fee "$prio_smol") ;;
+            *) { echo "Usage: 'coals $1 [coal|wood]'" ; exit ;} ;;
+         esac ;;
+      "unequip"|"replant") _params=("$1" --priority-fee "$prio_smol") ;;
       "enhance"|"equip") [ "$2" != "" ] && [ "$2" == "$(grep -oP "[1-9A-HJ-NP-Za-km-z]{32,44}" <<< "$2")" ] &&
          { _params=("$1" --tool "$2" --priority-fee "$( [ "$1" == "equip" ] && echo "$prio_smol" || echo "$prio_big" )") ;} ||
          { echo "Usage: 'coals $1 <tool_address>'" ; exit ;} ;;
@@ -160,8 +166,10 @@ coals_balance() {
    }
 
    tool_time_equipped() {
-      output="$(coal inspect "${_cfg[@]}" 2>/dev/null)"
-      [ "$output" != "" ] && grep -zoP "(?<=Inspected:\s)([1-9A-HJ-NP-Za-km-z]{32,44})|(?<=Durability:\s)(\d+(\.\d+)?)|(?<=Multiplier:\s)(\d+(\.\d+)?)" <<< "$output" | awk 'BEGIN{RS="\0"} {a[NR]=$0} END{printf "tool,,*#%s#%s#%s#%s\n", a[1], a[3] * 100, a[2], "<- Equipped!"}'
+      for i in coal wood ; do
+         output="$(coal inspect --resource "$i" "${_cfg[@]}" 2>/dev/null)"
+         [ "$output" != "" ] && grep -zoP "(?<=Inspected:\s)([1-9A-HJ-NP-Za-km-z]{32,44})|(?<=Durability:\s)(\d+(\.\d+)?)|(?<=Multiplier:\s)(\d+(\.\d+)?)" <<< "$output" | awk -v var="$i" 'BEGIN{RS="\0"} {a[NR]=$0} END{printf "tool,%s,*#%s#%s#%s#%s\n", var, a[1], a[3] * 100, a[2], "<- Equipped!"}'
+      done
    }
 
    tool_time_unequipped() {
@@ -178,10 +186,10 @@ coals_balance() {
       rpc_output="$(curl -s -X POST -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"searchAssets\",\"params\":{\"interface\":\"MplCoreAsset\",\"ownerAddress\":\"$sol_addr\"}}" "https://api.mainnet-beta.solana.com")"
 
       # get address and durability for items which are unburnt and have durability attribute
-      jq_output="$(jq -r '.result.items[]? | select(.burnt == false)? | select(.plugins.attributes.data.attribute_list[]? | select(.key == "multiplier")? | select(.value)?)? | select(.plugins.attributes.data.attribute_list[]? | select(.key == "durability")? | select(.value)?)? | "\(.id),\((.plugins.attributes.data.attribute_list[] | select(.key == "multiplier") | .value)),\((.plugins.attributes.data.attribute_list[] | select(.key == "durability") |.value))"' <<<"$rpc_output")"
+      jq_output="$(jq -r '.result.items[]? | select(.burnt==false)? | select( .plugins.attributes.data.attribute_list[]?|select(.key=="multiplier")?|select(.value)? )? | select( .plugins.attributes.data.attribute_list[]?|select(.key=="durability")?|select(.value)? )? | select( .plugins.attributes.data.attribute_list[]?|select(.key=="resource")?|select(.value)? )? | "\(.id),\((.plugins.attributes.data.attribute_list[]|select(.key=="resource")|.value)),\((.plugins.attributes.data.attribute_list[]|select(.key=="multiplier")|.value)),\((.plugins.attributes.data.attribute_list[]|select(.key=="durability")|.value))"' <<<"$rpc_output")"
 
       # read info into array
-      [ "$jq_output" != "" ] && while IFS=, read -r tool_addr tool_mult tool_durb; do tools_blah["$tool_addr"]="$tool_mult#$tool_durb" ; done <<< "$jq_output"
+      [ "$jq_output" != "" ] && while IFS=, read -r tool_addr tool_res tool_mult tool_durb; do tools_blah["$tool_addr"]="$tool_res,*#$tool_addr#$tool_mult#$tool_durb" ; done <<< "$jq_output"
 
       # call cull function in parallel for super fast ultra speedyness
       for i in "${!tools_blah[@]}"; do [ "$(grep -oP "#1000$" <<< "${tools_blah[$i]}")" != "" ] && tool_cull "$i" >> "$fk_outa_hea" & cull_pids+=($!) ; done
@@ -193,7 +201,7 @@ coals_balance() {
       while read -r line; do unset "tools_blah[$line]" ; done < "$fk_outa_hea"
 
       # print results
-      for i in "${!tools_blah[@]}" ; do printf 'tool,,#%s#%s\n' "$i" "${tools_blah[$i]}" ; done
+      for i in "${!tools_blah[@]}" ; do printf 'tool,%s\n' "${tools_blah[$i]}" ; done
    }
 
    # mystery function what it does who can tell. you thought maybe the comment would give you a clue but no.
@@ -222,7 +230,10 @@ coals_balance() {
       case $type in
          "balance") coals_bals["$resource"]="$value" ;;
          "stake") coals_stakes["$resource"]="$value" ;;
-         "tool") coals_tools+=("$value") ;;
+         "tool")
+            [ "$resource" == "coal" ] && emoj="$(printf '%b' "\U26CF")" || emoj="$(printf '%b' "\U1FA93")"
+            value="${value//\*/$emoj}"
+            coals_tools+=("$value") ;;
       esac
    done < "$results"
 
@@ -235,7 +246,7 @@ coals_balance() {
       printf '\e[7G%s\n' "None"
    else
       printf '\e[1;30m\e[7G%s\e[54G%s\e[62G%s\e[m\n' "Address" "Mult." "Durability"
-      for i in ${!coals_tools[@]} ; do awk 'BEGIN{FS="#"} {printf "\33[4G\33[1;30m%s\33[m\33[7G%s\33[54G%4.2fx\33[62G%10.5f\33[74G\33[1;30m%s\33[m\n",$1,$2,$3/100,$4,$5}' <<< "${coals_tools[$i]}" ; done
+      for i in ${!coals_tools[@]} ; do awk 'BEGIN{FS="#"} {printf "\33[4G%s\33[m\33[7G%s\33[54G%4.2fx\33[62G%10.5f\33[74G\33[1;30m%s\33[m\n",$1,$2,$3/100,$4,$5}' <<< "${coals_tools[$i]}" ; done
       [ "$(which jq)" == "" ] && printf '\e[7G\e[1;30m%s\n' "(Install 'jq' to see non-equipped tools here)"
    fi
    printf '\n'
@@ -373,19 +384,19 @@ Every 'coals' command:
    coals                           # show this help message
    coals help                      # show this help message and the 'coal' help message
    coals mine                      # mine for coal
-   coals smelt                     # smelt for iron ingots (cost 75 coal and 0.01 ore per ingot)
+   coals smelt                     # smelt for iron ingots (cost 75 coal + 0.01 ore per ingot)
    coals chop                      # chop for wood
    coals replant                   # replant trees after chopping
    coals reprocess                 # reprocess for chromium (cost $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol)
-   coals craft                     # craft a new pickaxe (cost 3 ingot and 2 wood)
+   coals craft [<resource>]        # craft a new tool for extracting [ [coal] | wood ] (cost 3 ingot + 2 wood)
    coals inspect [<tool_address>]  # inspect currently equipped tool [or <tool_address>]
    coals unequip                   # unequip currently equipped tool
-   coals enhance <tool_address>    # enhance specified pickaxe (cost 1 chromium and $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9+0.01}') sol)
-   coals equip <tool_address>      # equip specified pickaxe
+   coals enhance <tool_address>    # enhance specified tool (cost 1 chromium + $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9+0.01}') sol)
+   coals equip <tool_address>      # equip specified tool
    coals balance                   # show all balances, stakes, and tools
-   coals balance <resource>        # show balance [& stake] of <resource> (coal, ingot, wood, chromium, ore)
-   coals stake [<resource>]        # stake all coal [or <resource>: coal, ingot, wood]
-   coals claim [<resource>]        # claim all staked coal [or <resource>: coal, ingot, wood]
+   coals balance <resource>        # show balance & stake of [ coal | ingot | wood | chromium | ore ]
+   coals stake [<resource>]        # stake all [ [coal] | ingot | wood ]
+   coals claim [<resource>]        # claim all staked [ [coal] | ingot | wood ]
    coals version                   # show version numbers of 'coals' and 'coal'
    coals update                    # update 'coals' to latest version
    coals uninstall                 # uninstall 'coals'
