@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.13.37"
+coals_version="0.1.13.37.420"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -273,7 +273,7 @@ inspect_external() {
    for i in Type Multiplier Durability Address Owner ; do printf '\n\e[4G\e[1;30m%10s:\e[m\e[16G%s' "$i" "${inspectoor[$i]}" ; done
 
    # if the tool is currently equipped, warn that the "owner" is not the actual owner
-   [ "$equipped_as_bro" == "yeah" ] && printf '\e[1;33m%s\n\e[16G\e[1;30m%s\n\e[16G%s\n\e[16G%s\e[m' " *" "Note: This \"owner\" is a Program Derived Address!" "> That means the tool is currently down in the mines!" "> To find the true owner, look up the PDA on Solscan and check \"Funded by\"."
+   [ "$equipped_as_bro" == "yeah" ] && printf '\e[1;33m%s\n\e[16G\e[1;30m%s\n\e[16G%s\e[m' " *" "Note: This \"owner\" is a Program Derived Address!" "> This tool might be in use down in the mines, or for sale at the market."
    printf '\n\n'
 }
 
