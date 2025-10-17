@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
-coals_version="0.1.13.37.420.69"
+coals_version="0.1.13.37.69.420"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
-
    # Set 'coal' parameters
-   # - pay high fee to reprocess for $CHROMIUM and enhance tools because reward is timing dependent
    freecores=0       # number of CPU cores to leave unused when mining/smelting/chopping
-   buffer_time=2     # seconds
-   prio_smol=111     # lamports
-   prio_big=2000002  # lamports
+   buffer_time=2     # seconds before deadline to stop mining and send tx (probably don't change this)
+   prio_smol=111     # lamports priority fee for most actions
+   prio_big=2000002  # lamports priority fee for reprocess/enhance
+
+   # Auto set a different 'solana' config for each username (or don't)
+   case "$USER" in
+      # "asdf"|"asdg") freecores=2 ;;&
+      # "asdc") freecores=4 ;;&
+      # "<your_username_here>") _cfg=(--config "$HOME/.config/solana/<whatever_config_file_you_want_to_use>.yml") ;;
+      *) _cfg=(--config "$HOME/.config/solana/coals_config.yml") ;; # fallback to default
+   esac
 
    case "$1" in
       "") coals_help ; exit ;;
@@ -22,14 +28,6 @@ coal_start() {
    for i in solana coal ; do
       [ ! "$(which $i)" ] && { echo "Error: $i not installed wyd" ; exit ;}
    done
-
-   # Auto set a different 'solana' config for each username (or don't)
-   case "$USER" in
-      # "<your_username_here>") _cfg="--config $HOME/.config/solana/<whatever_config_file_you_want_to_use>.yml" ;;
-      # "asdf"|"asdg") freecores=2 ;;&
-      # "asdc") freecores=4 ;;&
-      *) _cfg=(--config "$HOME/.config/solana/coals_config.yml") ;; # fallback to default
-   esac
 
    # Switch to infinite loop mode for work functions
    shopt -s extglob
@@ -148,7 +146,8 @@ coals_balance() {
    balance_order=(sol coal ingot wood chromium ore)
    stake_order=(coal ingot wood)
    coals_tools=()
-   results=$(mktemp) ; trap 'kill "${pids[@]}" "$timeoutpid" 2>/dev/null ; rm -f $results' EXIT
+   results=$(mktemp)
+   trap 'kill "${pids[@]}" "$timeoutpid" 2>/dev/null ; rm -f $results' EXIT
 
    make_fetch_happen() {
       local resource="$1" output type
@@ -204,6 +203,9 @@ coals_balance() {
       for i in "${!tools_blah[@]}" ; do printf 'tool,%s\n' "${tools_blah[$i]}" ; done
    }
 
+   #timestamp
+   printf '%(%Y-%m-%d %H:%M:%S %Z)T\n'
+
    # mystery function what it does who can tell. you thought maybe the comment would give you a clue but no.
    printf '\n%s' "Fetching..."
 
@@ -213,7 +215,7 @@ coals_balance() {
    # get equipped tool info
    tool_time_equipped "$i" >> "$results" & pids+=($!)
 
-   # get spent tool addresses if 'jq' is installed
+   # get non-equipped tool info if 'jq' is installed
    [ "$(which jq)" != "" ] && { tool_time_unequipped "$i" >> "$results" & pids+=($!) ;}
 
    # timeout countdown
@@ -354,11 +356,14 @@ coals_checkver() {
 
 
 coals_uninstall() {
-   printf '\e[1;33m%s\e[m' "Uninstalling coals..."
-   [ "$0" == "$HOME/.local/bin/coals" ] && rm "$HOME/.local/bin/coals" && [ -f "$HOME/.config/solana/coals_config.yml" ] && {
-      printf '%s\n\n\e[1;37m%s\e[m%s\e[1;37m%s\e[m' "DONE" "Delete config file" " $HOME/.config/solana/coals_config.yml" "? [Y/N]: "
-      rm -i "$HOME/.config/solana/coals_config.yml" 2>/dev/null && { echo "OK" ; exit 0 ;} ;}
-      echo "failed :(" ; exit 1
+   printf '\n\e[1;33m%s\e[m%s' "Uninstalling coals" "... "
+   [ "$0" == "$HOME/.local/bin/coals" ] && rm "$HOME/.local/bin/coals" && { 
+      printf '%s\n\n' "Done."
+      [ -f "${_cfg[1]}" ] && printf '\e[1;37m%s\e[m%s\e[1;37m%s\e[m' "Delete config file" " $HOME/.config/solana/coals_config.yml" "? [Y/N]: "
+      rm -i "${_cfg[1]}" 2>/dev/null
+      echo "OK" ; exit 0
+   }
+   echo "Failed :(" ; exit 1
 }
 
 
@@ -409,5 +414,4 @@ Every 'coals' command:
 [[ "$0" != "$HOME/.local/bin/coals" ]] && { coals_install ; exit ;}
 
 printf '%s\n' "coals $coals_version"
-case "$1" in balance) printf '%(%Y-%m-%d %H:%M:%S %Z)T\n' ;; esac
 coal_start "$@"
