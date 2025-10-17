@@ -48,13 +48,13 @@ coal_start() {
                { inspect_external "$2" ; exit ;} ||
                { echo "Usage: 'coals $1 [<tool_address>]'" ; exit ;} ;;
          esac ;;
-      "craft")
+      "craft"|unequip)
          case "$2" in
             "") _params=("$1" --priority-fee "$prio_smol") ;;
             "coal"|"wood") _params=("$1" --resource "$2" --priority-fee "$prio_smol") ;;
             *) { echo "Usage: 'coals $1 [coal|wood]'" ; exit ;} ;;
          esac ;;
-      "unequip"|"replant") _params=("$1" --priority-fee "$prio_smol") ;;
+      "replant") _params=("$1" --priority-fee "$prio_smol") ;;
       "enhance"|"equip") [ "$2" != "" ] && [ "$2" == "$(grep -oP "[1-9A-HJ-NP-Za-km-z]{32,44}" <<< "$2")" ] &&
          { _params=("$1" --tool "$2" --priority-fee "$( [ "$1" == "equip" ] && echo "$prio_smol" || echo "$prio_big" )") ;} ||
          { echo "Usage: 'coals $1 <tool_address>'" ; exit ;} ;;
@@ -306,7 +306,7 @@ coals_install() {
    echo "Installing coals $coals_version"
 
    # Check for and remove previous version
-   [ -f "$HOME/.local/bin/coals" ] && coals_checkver && { 
+   [ -f "$HOME/.local/bin/coals" ] && coals_checkver && {
       printf '%s' "Removing previous version..."
       oldcoals="$(mktemp --suffix "_old_coals.sh")"
       trap 'rm -f "$oldcoals"' EXIT
@@ -357,7 +357,7 @@ coals_checkver() {
 
 coals_uninstall() {
    printf '\n\e[1;33m%s\e[m%s' "Uninstalling coals" "... "
-   [ "$0" == "$HOME/.local/bin/coals" ] && rm "$HOME/.local/bin/coals" && { 
+   [ "$0" == "$HOME/.local/bin/coals" ] && rm "$HOME/.local/bin/coals" && {
       printf '%s\n\n' "Done."
       [ -f "${_cfg[1]}" ] && printf '\e[1;37m%s\e[m%s\e[1;37m%s\e[m' "Delete config file" " $HOME/.config/solana/coals_config.yml" "? [Y/N]: "
       rm -i "${_cfg[1]}" 2>/dev/null
@@ -395,7 +395,7 @@ Every 'coals' command:
    coals reprocess                 # reprocess for chromium (cost $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol)
    coals craft [<resource>]        # craft a new tool for extracting [ [coal] | wood ] (cost 3 ingot + 2 wood)
    coals inspect [<tool_address>]  # inspect currently equipped tool [or <tool_address>]
-   coals unequip                   # unequip currently equipped tool
+   coals unequip [<resource>]      # unequip currently equipped [ [coal] | wood ] extracting tool
    coals enhance <tool_address>    # enhance specified tool (cost 1 chromium + $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9+0.01}') sol)
    coals equip <tool_address>      # equip specified tool
    coals balance                   # show all balances, stakes, and tools
