@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-coals_version="0.1.13.37.69.420"
+coals_version="0.1.14"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
    # Set 'coal' parameters
    freecores=0       # number of CPU cores to leave unused when mining/smelting/chopping
    buffer_time=2     # seconds before deadline to stop mining and send tx (probably don't change this)
-   prio_smol=111     # lamports priority fee for most actions
-   prio_big=2000002  # lamports priority fee for reprocess/enhance
+   prio_smol=200     # lamports priority fee for most actions
+   prio_big=2000000  # lamports priority fee for reprocess/enhance
 
    # Auto set a different 'solana' config for each username (or don't)
    case "$USER" in
