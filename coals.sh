@@ -72,6 +72,20 @@ coal_start() {
             "ore") { printf 'Balance: %s ORE\n' "$(spl-token balance oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp "${_cfg[@]}")" ; exit ;} ;;
             *) { echo "Options: coal, ingot, wood, chromium, ore." ; exit ;} ;;
          esac ;;
+      "close")
+         case "$2" in
+            "all")
+               echo "Claiming all stakes and closing all stake accounts..."
+               for h in claim close ; do
+                  for i in coal ingot wood ; do
+                     _params=("$h" --resource "$i" --priority-fee "$prio_smol")
+                     bash -c "coal ${_cfg[*]} ${_params[*]} 2>/dev/null"
+                  done 
+               done
+               echo "Done." ; exit ;;
+            "coal"|"ingot"|"wood") _params=("$1" --resource "$2" --priority-fee "$prio_smol") ;;
+            *) { echo "Usage: coals close [coal|ingot|wood|all]" ; exit ;} ;;
+         esac ;;
       "version") coal -V ; exit ;;
       *) _params=("$@") ;;
    esac
@@ -402,6 +416,7 @@ Every 'coals' command:
    coals balance <resource>        # show balance & stake of [ coal | ingot | wood | chromium | ore ]
    coals stake [<resource>]        # stake all [ [coal] | ingot | wood ]
    coals claim [<resource>]        # claim all staked [ [coal] | ingot | wood ]
+   coals close <resource>          # claim stake and close stake account(s) for [ coal | ingot | wood | all ]
    coals version                   # show version numbers of 'coals' and 'coal'
    coals update                    # update 'coals' to latest version
    coals uninstall                 # uninstall 'coals'
