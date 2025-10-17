@@ -84,7 +84,7 @@ coal_start() {
                done
                echo "Done." ; exit ;;
             "coal"|"ingot"|"wood") _params=("$1" --resource "$2" --priority-fee "$prio_smol") ;;
-            *) { echo "Usage: coals close [coal|ingot|wood|all]" ; exit ;} ;;
+            *) { echo "Usage: 'coals $1 [coal|ingot|wood|all]'" ; exit ;} ;;
          esac ;;
       "version") coal -V ; exit ;;
       *) _params=("$@") ;;
