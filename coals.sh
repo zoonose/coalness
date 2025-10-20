@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.14.1"
+coals_version="0.1.14.2"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -24,12 +24,12 @@ coal_start() {
       "uninstall") coals_uninstall ; exit ;;
    esac
 
-   # Check if 'solana' and 'coal' are installed
-   coals_dependencies
+   # Check solana and coal are installed
+   coals_checkdepends
 
    # Switch to infinite loop mode for work functions
    shopt -s extglob
-   [ -f "$0" ] && [[ "$1" == @("mine"|"smelt"|"chop") ]] && { looptask="$1" ; export -f coal_start ; coals_loop ; exit ;}
+   [ -f "$0" ] && [[ "$1" == @("mine"|"smelt"|"chop") ]] && { looptask="$1" ; export -f coal_start coals_checkdepends; coals_loop ; exit ;}
 
    # Parse args
    case "$1" in
@@ -100,6 +100,20 @@ coal_start() {
 
    # this should only happen if 'coal' freaks out while mining/smelting/chopping
    [[ "$0" != *"coals" ]] && echo "ERROR: Tantrum >:("
+}
+
+
+# Check underpants for necessary contents
+coals_checkdepends() {
+   for i in solana coal ; do [ ! "$(which $i)" ] && {
+      printf '\n%s\n\n%s\n\n' "Error: 'solana' and 'coal' must be installed to use 'coals'." "The following instructions are valid as of 2025-10-20:"
+      [ ! "$(which solana)" ] && printf '%s\n\t\t%s\n\n' 'To install solana:' 'sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"'
+      [ ! "$(which coal)" ] && { printf '%s\n' 'To install coal:'
+         [ ! "$(which cargo)" ] && printf '\t%s\n\t\t%s\n\t%s\n' 'First install rust:' 'https://www.rust-lang.org/tools/install' 'Then run:'
+         printf '\t\t%s\n\n' 'cargo install coal-cli --locked' ;}
+      [ ! "$(which jq)" ] && printf '%s\n\n' "Tip: Installing 'jq' is also recommended for full balance-fetching functionality."
+      exit 1 ;}
+   done
 }
 
 
@@ -313,29 +327,9 @@ coals_update() {
 }
 
 
-coals_dependencies() {
-   for i in solana coal ; do
-      [ ! "$(which $i)" ] && {
-         printf '\n%s\n' "Error: 'solana' and 'coal' CLIs must be installed to use 'coals'."
-         printf '\n%s\n\n' 'The following instructions are valid as of October 2025:'
-         [ ! "$(which solana)" ] && {
-            printf '%s\n\t\t%s\n\n' 'To install solana:' 'sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"'
-         }
-         [ ! "$(which coal)" ] && {
-            printf '%s\n' 'To install coal:'
-            [ ! "$(which cargo)" ] && printf '\t%s\n\t\t%s\n\t%s\n' 'First install rust:' 'https://www.rust-lang.org/tools/install' 'Then run:'
-            printf '\t\t%s\n\n' 'cargo install coal-cli --locked'
-         }
-         [ ! "$(which jqfds)" ] && printf '%s\n\n' "Tip: Installing 'jq' is also recommended for full balance-fetching functionality."
-         exit 1
-      }
-   done
-}
-
-
 coals_install() {
 
-   coals_dependencies
+   coals_checkdepends
 
    echo "Installing coals $coals_version"
 
