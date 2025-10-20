@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.14"
+coals_version="0.1.14.1"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -25,9 +25,7 @@ coal_start() {
    esac
 
    # Check if 'solana' and 'coal' are installed
-   for i in solana coal ; do
-      [ ! "$(which $i)" ] && { echo "Error: $i not installed wyd" ; exit ;}
-   done
+   coals_dependencies
 
    # Switch to infinite loop mode for work functions
    shopt -s extglob
@@ -315,7 +313,29 @@ coals_update() {
 }
 
 
+coals_dependencies() {
+   for i in solana coal ; do
+      [ ! "$(which $i)" ] && {
+         printf '\n%s\n' "Error: 'solana' and 'coal' CLIs must be installed to use 'coals'."
+         printf '\n%s\n\n' 'The following instructions are valid as of October 2025:'
+         [ ! "$(which solana)" ] && {
+            printf '%s\n\t\t%s\n\n' 'To install solana:' 'sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"'
+         }
+         [ ! "$(which coal)" ] && {
+            printf '%s\n' 'To install coal:'
+            [ ! "$(which cargo)" ] && printf '\t%s\n\t\t%s\n\t%s\n' 'First install rust:' 'https://www.rust-lang.org/tools/install' 'Then run:'
+            printf '\t\t%s\n\n' 'cargo install coal-cli --locked'
+         }
+         [ ! "$(which jqfds)" ] && printf '%s\n\n' "Tip: Installing 'jq' is also recommended for full balance-fetching functionality."
+         exit 1
+      }
+   done
+}
+
+
 coals_install() {
+
+   coals_dependencies
 
    echo "Installing coals $coals_version"
 
@@ -328,15 +348,30 @@ coals_install() {
    } && echo "done"
 
    # Check for and create "~/.local/bin" directory
-   [ ! -d "$HOME/.local/bin" ] && { printf '%s' "Creating directory $HOME/.local/bin..." ; mkdir "$HOME/.local/bin" ;} && echo "done"
-
-   # Add to PATH if not already there (only for current session; bash should add it automatically on startup if it exists)
+   [ ! -d "$HOME/.local/bin" ] && { 
+      printf '%s' "Creating directory $HOME/.local/bin... " ; mkdir "$HOME/.local/bin" || { echo "Error: could not :(" ; exit 1 ;}
+      echo "done"
+      echo "Note: '$HOME/.local/bin' must be in your PATH to run 'coals' from anywhere."
+      echo "Bash normally adds it automatically if it exists (you may need to restart your terminal)."
+      echo "If that doesn't work, add it manually, eg., by adding the following line to your ~/.bashrc or ~/.profile:"
+      echo '   export PATH="$HOME/.local/bin:$PATH"'
+   }
+   # Add to PATH if not already there (only for current session (NOT SURE IF THIS EVEN WORKS); bash should add it automatically on startup if it exists)
    [ "$(echo "$PATH" | tr ":" "\n" | grep "$HOME/\.local/bin$")" == "" ] && export PATH="$HOME/.local/bin:$PATH"
 
    # Create default config file if it doesn't exist
-   # The commitment level is 'processed' instead of (default) 'final' to help with transaction wait times.
+   [ ! -d "$HOME/.config/solana" ] && { 
+      mkdir -p "$HOME/.config/solana" || { 
+         echo "Error: could not create config directory :(" ;
+         echo "   It should have existed already. This is unusual. Can't continue."
+         echo "   Try asking for help in the coal discord server." ; exit 1 ;}
+      echo "Created directory for config file: $HOME/.config/solana"
+      echo "   This was expected to already exist. You may have a non-standard solana CLI installation."
+      echo "   If you have issues, try asking for help in the coal discord server."
+   }
    local coalfig="$HOME/.config/solana/coals_config.yml"
    [ ! -f "$coalfig" ] && { printf '%s\n%s\n%s\n%s\n%s\n' "---" "json_rpc_url: 'https://api.mainnet-beta.solana.com'" "websocket_url: ''" "keypair_path: '$HOME/.config/solana/id.json'" "commitment: 'processed'" > "$coalfig" ; echo "Created default config file at $coalfig" ;}
+   # BTW the 'commitment' level is 'processed' instead of the default 'confirmed' to help with transaction wait times.
 
    # Check that ~/.local/bin exists and move this script there and rename to 'coals' and make it executable and report result
    [ -d "$HOME/.local/bin" ] && mv "$0" "$HOME/.local/bin/coals" && chmod +x "$HOME/.local/bin/coals" && printf '\n%s\n%s\n\n' "Installed in $HOME/.local/bin" "run 'coals' to see a list of commands" || { echo "Failed to install" ; printf '%s' "Restoring previous version..." ; mv "$oldcoals" "$HOME/.local/bin/coals" && echo done || { echo failed ; exit 1 ;} ;}
