@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.14.2"
+coals_version="0.1.15"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -27,9 +27,10 @@ coal_start() {
    # Check solana and coal are installed
    coals_checkdepends
 
-   # Switch to infinite loop mode for work functions
+   # Switch to infinite loop mode for work functions ; or run equip/enhance menu selector if conditions are met
    shopt -s extglob
    [ -f "$0" ] && [[ "$1" == @("mine"|"smelt"|"chop") ]] && { looptask="$1" ; export -f coal_start coals_checkdepends; coals_loop ; exit ;}
+   [ -f "$0" ] && [[ "$1" == @("equip"|"enhance") ]] && [ "$2" == "" ] && [ ! "$(which jq)" == "" ] && { selecttask="$1" ; export -f coal_start coals_checkdepends ; coals_balance selectoor ; exit ;}
 
    # Parse args
    case "$1" in
@@ -55,7 +56,7 @@ coal_start() {
       "replant") _params=("$1" --priority-fee "$prio_smol") ;;
       "enhance"|"equip") [ "$2" != "" ] && [ "$2" == "$(grep -oP "[1-9A-HJ-NP-Za-km-z]{32,44}" <<< "$2")" ] &&
          { _params=("$1" --tool "$2" --priority-fee "$( [ "$1" == "equip" ] && echo "$prio_smol" || echo "$prio_big" )") ;} ||
-         { echo "Usage: 'coals $1 <tool_address>'" ; exit ;} ;;
+         { echo "Usage: 'coals $1 <tool_address>'" ; echo "   Or: 'coals $1' to select from menu (only if 'jq' is installed)" ; exit ;} ;;
       "stake"|"claim")
          case "$2" in
             "") _params=("$1" --priority-fee "$prio_smol") ;;
@@ -235,11 +236,13 @@ coals_balance() {
    # mystery function what it does who can tell. you thought maybe the comment would give you a clue but no.
    printf '\n%s' "Fetching..."
 
-   # get balances
-   for i in "${balance_order[@]}" ; do make_fetch_happen "$i" >> "$results" & pids+=($!) ; done
+   [ ! "$1" == "selectoor" ] && {
+      # get balances
+      for i in "${balance_order[@]}" ; do make_fetch_happen "$i" >> "$results" & pids+=($!) ; done
 
-   # get equipped tool info
-   tool_time_equipped "$i" >> "$results" & pids+=($!)
+      # get equipped tool info
+      tool_time_equipped "$i" >> "$results" & pids+=($!)
+   }
 
    # get non-equipped tool info if 'jq' is installed
    [ "$(which jq)" != "" ] && { tool_time_unequipped "$i" >> "$results" & pids+=($!) ;}
@@ -261,22 +264,36 @@ coals_balance() {
          "tool")
             [ "$resource" == "coal" ] && emoj="$(printf '%b' "\U26CF")" || emoj="$(printf '%b' "\U1FA93")"
             value="${value//\*/$emoj}"
+            [ "$1" == "selectoor" ] && value="$(printf '%s) %s' "$(( "${#coals_tools[@]}" + 1 ))" "$value")"
             coals_tools+=("$value") ;;
       esac
    done < "$results"
 
    # print it
    printf '\e[2K\r'
-   printf '\e[1;37m%s\e[m\n' "Balance:" ; for B in "${balance_order[@]}" ; do printf '%12.4f %s\n' "${coals_bals[$B]}" "${B^^}" ; done
-   printf '\e[1;37m%s\e[m\n' "Stake:" ; for S in "${stake_order[@]}" ; do printf '%12.4f %s\n' "${coals_stakes[$S]}" "${S^^}" ; done
-   printf '\e[1;37m%s\e[m\n' "Tools:" ;
+   [ ! "$1" == "selectoor" ]  && {
+      printf '\e[1;37m%s\e[m\n' "Balance:" ; for B in "${balance_order[@]}" ; do printf '%12.4f %s\n' "${coals_bals[$B]}" "${B^^}" ; done
+      printf '\e[1;37m%s\e[m\n' "Stake:" ; for S in "${stake_order[@]}" ; do printf '%12.4f %s\n' "${coals_stakes[$S]}" "${S^^}" ; done
+   }
+   printf '\e[1;37m%s\e[m\n' "Tools:"
    if [ "${#coals_tools[@]}" -eq 0 ] ; then
       printf '\e[7G%s\n' "None"
    else
       printf '\e[1;30m\e[7G%s\e[54G%s\e[62G%s\e[m\n' "Address" "Mult." "Durability"
-      for i in ${!coals_tools[@]} ; do awk 'BEGIN{FS="#"} {printf "\33[4G%s\33[m\33[7G%s\33[54G%4.2fx\33[62G%10.5f\33[74G\33[1;30m%s\33[m\n",$1,$2,$3/100,$4,$5}' <<< "${coals_tools[$i]}" ; done
+      for i in ${!coals_tools[@]} ; do awk 'BEGIN{FS="#"} {printf "%4s\33[m\33[7G%s\33[54G%4.2fx\33[62G%10.5f\33[74G\33[1;30m%s\33[m\n",$1,$2,$3/100,$4,$5}' <<< "${coals_tools[$i]}" ; done
       [ "$(which jq)" == "" ] && printf '\e[7G\e[1;30m%s\n' "(Install 'jq' to see non-equipped tools here)"
    fi
+
+   [ "$1" == "selectoor" ]  && {
+      select_addrs=(0) ; for i in ${!coals_tools[@]} ; do select_addrs+=("$(awk 'BEGIN{FS="#"} {printf "%s\n", $2}' <<< "${coals_tools[$i]}")") ; done
+      printf '%s) Cancel\n\n' "${#select_addrs[@]}"
+      read -rp "Which tool would you like to $selecttask? > " choice
+      if [ "$(grep -oP "[1-9A-HJ-NP-Za-km-z]{32,44}" <<< "${select_addrs[$choice]}")" ] ; then
+         coal_start "$selecttask" "${select_addrs[$choice]}"
+      else
+         echo "Cancelled."
+      fi
+   }
    printf '\n'
 }
 
@@ -417,15 +434,17 @@ Notes:
 - Transaction fees for mining/smelting/chopping are approximately $(awk -v var="$prio_smol" 'BEGIN {printf "%.2g", (var+5000)*60/10^9}') sol per hour.
   > 5000 lamport base fee + $prio_smol lamport priority fee per tx (1 tx per minute).
   > Smelting also burns coal and wraps ore (see below).
-- Higher fee for reprocess/enhance because rewards partially depend on precise transaction timing.
+- Higher fee for 'reprocess'|'enhance' because rewards partially depend on precise transaction timing.
   > 5000 lamport base fee + $prio_big lamport priority fee per tx (2 tx per operation).
   > Enhancing also consumes chromium and additional sol (see below).
-- To adjust fees or processor usage, edit '~/.local/bin/coals' and change these variables (near the top):
+- To adjust fees or processor utilisation, edit '~/.local/bin/coals' and change these variables (near the top):
   > Priority fees (in lamports): 'prio_smol' (most functions), and 'prio_big' (reprocess/enhance).
   > Number of CPU cores to NOT use while mining etc: 'freecores'.
   > Note: These changes will not persist through updates. A better solution may come in future :)
 - To use a different solana keypair, edit '~/.config/solana/coals_config.yml'.
-- Mining/smelting/chopping will auto-restart on non-fatal errors.
+- 'mine'|'smelt'|'chop' will auto-restart on non-fatal errors.
+- Full 'balance'|'equip'|'enhance' functionality requires 'jq' (json processor) to be installed.
+  > Tool type icons:  Pickaxe (coal): $(printf '\U26CF')    Woodcutter's Axe (wood): $(printf '\U1FA93')
 - Commands not listed below (including invalid & typos) will be passed through to 'coal'.
 
 Every 'coals' command:
@@ -438,9 +457,11 @@ Every 'coals' command:
    coals reprocess                 # reprocess for chromium (cost $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9}') sol)
    coals craft [<resource>]        # craft a new tool for extracting [ [coal] | wood ] (cost 3 ingot + 2 wood)
    coals inspect [<tool_address>]  # inspect currently equipped tool [or <tool_address>]
-   coals unequip [<resource>]      # unequip currently equipped [ [coal] | wood ] extracting tool
+   coals unequip [<resource>]      # unequip currently equipped [ [coal] | wood ]-extracting tool
    coals enhance <tool_address>    # enhance specified tool (cost 1 chromium + $(awk -v var="$prio_big" 'BEGIN {printf "%.2g", 2*(var+5000)/10^9+0.01}') sol)
+   coals enhance                   # menu-select tool to enhance (same cost as above)
    coals equip <tool_address>      # equip specified tool
+   coals equip                     # menu-select tool to equip
    coals balance                   # show all balances, stakes, and tools
    coals balance <resource>        # show balance & stake of [ coal | ingot | wood | chromium | ore ]
    coals stake [<resource>]        # stake all [ [coal] | ingot | wood ]
