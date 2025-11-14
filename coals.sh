@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-coals_version="0.1.15.1"
+coals_version="0.1.15.2"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
    # Set 'coal' parameters
    freecores=0       # number of CPU cores to leave unused when mining/smelting/chopping
-   buffer_time=5     # seconds before deadline to stop mining and send tx (try decreasing this for a slight advantage, or increasing it if you get 0x5 errors)
+   buffer_time=3     # (integer) seconds before deadline to stop mining and send tx (you might see 0x5 errors if set wrong for your system)
    prio_smol=200     # lamports priority fee for most actions
    prio_big=2000000  # lamports priority fee for reprocess/enhance
 
