@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-coals_version="0.1.15.2"
+coals_version="0.1.16"
 # 'coals': easy launcher for 'coal' (coal-cli 2.9.2)
 
 coal_start() {
@@ -149,7 +149,7 @@ coals_loop() {
       _app_pid=$!
 
       # Kill if death or when log file becomes chonkish or if thing-happening stops
-      tail -F -n +2 "$_log" | while read -r -t 40 -n 15970 line; do
+      tail -F -n +2 "$_log" | while read -r -t 60 -n 15970 line; do
          [ "$(wc -c < "$_log")" -gt 6942069 ] && [[ "$(tail -n 1 "$_log")" == *"OK"* ]] && kill HUP "$_app_pid" 2>/dev/null && { echo ; sleep 3 ; printf '\n\e[1;36m%s\e[m\n\n' "Flushing temp file" ; break ;}
          [ "$(grep -oi "error" <<< "$line")" != "" ] && { printf '\n%b\n\n' "\U274c \U274c \U274c \U274c \U274c" ; kill $_app_pid 2>/dev/null ; break ;}
       done
