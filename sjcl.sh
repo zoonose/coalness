@@ -2,13 +2,13 @@
 
 printf '\n%s%b\n' "Super Janky Coal V2 Beta Leaderboooard V2 Beta!" "\U26CF \U26CF"
 
-for i in curl jq tr python3 paste awk sort ; do
+for i in mktemp curl jq tr python3 paste awk sort ; do
    [ "$(which $i)" == "" ] && echo "You need '$i' installed to run this script." && exit 1
 done
 
 stakes="$(mktemp)"
 
-printf '\n\e[1;37m%s\e[49G%s\e[60G%s\e[1;32m\n\n%s\e[m' "Address" "Picks" "Stake" "Fetching..."
+printf '\n\e[1;37m%s\e[49G%s\e[60G%s\n\n\e[1;33m%s\e[1;37m%s\e[m' "Address" "Picks" "Stake" "Fetching" "..."
 
 curl https://api.mainnet-beta.solana.com -s -X POST -H "Content-Type: application/json" -d '
    {
@@ -79,4 +79,4 @@ awk '{sum[$1] += $2; count[$1]++} END {for (name in sum) printf "%-44s %8d %22.1
 sort -k 3,3rn -k 2,2rn
 
 echo
-rm ${stakes}*
+rm ${stakes} ${stakes}.addresses ${stakes}.formatted
